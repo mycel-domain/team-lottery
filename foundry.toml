@@ -2,5 +2,11 @@
 src = "src"
 out = "out"
 libs = ["lib"]
+optimizer = true
+optimizer-runs = 1_000
+gas_reports = ["*"]
 
+[rpc_endpoints]
+basemainnet = "${BASE_MAINNET_RPC_URL}"
+basesepolia = "${BASE_SEP_RPC_URL}"
 # See more config options https://github.com/foundry-rs/foundry/blob/master/crates/config/README.md#all-options
