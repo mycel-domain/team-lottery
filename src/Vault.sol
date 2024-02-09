@@ -14,6 +14,12 @@ import {PrizePool} from "./PrizePool.sol";
 import {IVault} from "./interface/IVault.sol";
 
 contract Vault is IERC4626, ERC20Permit, Ownable, IVault {
+    /// The maximum amount of shares that can be minted.
+    uint256 private constant UINT96_MAX = type(uint96).max;
+
+    /// @notice Underlying asset decimals.
+    uint8 private immutable _underlyingDecimals;
+
     /// @notice Address of the ERC4626 vault generating yield.
     IERC4626 private immutable _yieldVault;
 
@@ -21,7 +27,7 @@ contract Vault is IERC4626, ERC20Permit, Ownable, IVault {
     PrizePool private immutable _prizePool;
 
     /// @notice Address of the underlying asset used by the Vault.
-    IERC20 private immutable vaultAsset;
+    IERC20 private immutable _asset;
 
     /// @notice Address of the TwabController used to keep track of balances.
     TwabController private immutable _twabController;
@@ -38,13 +44,147 @@ contract Vault is IERC4626, ERC20Permit, Ownable, IVault {
         PrizePool prizePool_,
         address owner_
     ) ERC20(name_, symbol_) ERC20Permit(name_) Ownable(owner_) {
-        vaultAsset = asset_;
+        _asset = asset_;
         _yieldVault = yieldVault_;
         _prizePool = prizePool_;
 
         TwabController twabController_ = prizePool_.twabController();
         _twabController = twabController_;
     }
+
+    /* ============ ERC20 / ERC4626 functions ============ */
+
+    /// @inheritdoc IERC4626
+    function asset() external view virtual override returns (address) {
+        return address(_asset);
+    }
+
+    /// @inheritdoc ERC20
+    function balanceOf(address _account) public view virtual override(ERC20, IERC20) returns (uint256) {
+        return _balanceOf(_account);
+    }
+
+    /// @inheritdoc IERC20Metadata
+    function decimals() public view virtual override(ERC20, IERC20Metadata) returns (uint8) {
+        return _underlyingDecimals;
+    }
+
+    /// @inheritdoc IERC4626
+    function totalAssets() external view virtual override returns (uint256) {
+        return _totalAssets();
+    }
+
+    /// @inheritdoc ERC20
+    function totalSupply() public view virtual override(ERC20, IERC20) returns (uint256) {
+        return _totalSupply();
+    }
+
+    /* ============ Conversion Functions ============ */
+
+    /// @inheritdoc IERC4626
+    function convertToShares(uint256 _assets) external view virtual override returns (uint256) {
+        return _convertToShares(_assets, _totalSupply(), _totalAssets(), Math.Rounding.Down);
+    }
+
+    /// @inheritdoc IERC4626
+    function convertToAssets(uint256 _shares) external view virtual override returns (uint256) {
+        return _convertToAssets(_shares, _totalSupply(), _totalAssets(), Math.Rounding.Down);
+    }
+
+    /* ============ Max / Preview Functions ============ */
+
+    /// @inheritdoc IERC4626
+    function maxDeposit(address) external view virtual override returns (uint256) {
+        uint256 _depositedAssets = _totalSupply();
+        return _isVaultCollateralized(_depositedAssets, _totalAssets()) ? _maxDeposit(_depositedAssets) : 0;
+    }
+
+    /// @inheritdoc IERC4626
+    function previewDeposit(uint256 _assets) external view virtual override returns (uint256) {
+        return _convertToShares(_assets, _totalSupply(), _totalAssets(), Math.Rounding.Down);
+    }
+
+    /// @inheritdoc IERC4626
+    function maxMint(address) external view virtual override returns (uint256) {
+        uint256 _depositedAssets = _totalSupply();
+        return _isVaultCollateralized(_depositedAssets, _totalAssets()) ? _maxDeposit(_depositedAssets) : 0;
+    }
+
+    /// @inheritdoc IERC4626
+    function previewMint(uint256 _shares) external view virtual override returns (uint256) {
+        return _convertToAssets(_shares, _totalSupply(), _totalAssets(), Math.Rounding.Up);
+    }
+
+    /// @inheritdoc IERC4626
+    function maxWithdraw(address _owner) external view virtual override returns (uint256) {
+        return _maxWithdraw(_owner);
+    }
+
+    /// @inheritdoc IERC4626
+    function previewWithdraw(uint256 _assets) external view virtual override returns (uint256) {
+        return _convertToShares(_assets, _totalSupply(), _totalAssets(), Math.Rounding.Up);
+    }
+
+    /// @inheritdoc IERC4626
+    function maxRedeem(address _owner) external view virtual override returns (uint256) {
+        return _maxRedeem(_owner);
+    }
+
+    /// @inheritdoc IERC4626
+    function previewRedeem(uint256 _shares) external view virtual override returns (uint256) {
+        return _convertToAssets(_shares, _totalSupply(), _totalAssets(), Math.Rounding.Down);
+    }
+
+    /* ============================================ */
+    /* ============ Internal Functions ============ */
+    /* ============================================ */
+    /* ============ ERC20 / ERC4626 functions ============ */
+
+    /**
+     * @notice Fetch underlying asset decimals.
+     * @dev Attempts to fetch the asset decimals. A return value of false indicates that the attempt failed in some way.
+     * @param asset_ Address of the underlying asset
+     * @return bool True if the attempt was successful, false otherwise
+     * @return uint8 Token decimals number
+     */
+    function _tryGetAssetDecimals(IERC20 asset_) private view returns (bool, uint8) {
+        (bool success, bytes memory encodedDecimals) =
+            address(asset_).staticcall(abi.encodeWithSelector(IERC20Metadata.decimals.selector));
+        if (success && encodedDecimals.length >= 32) {
+            uint256 returnedDecimals = abi.decode(encodedDecimals, (uint256));
+            if (returnedDecimals <= type(uint8).max) {
+                return (true, uint8(returnedDecimals));
+            }
+        }
+        return (false, 0);
+    }
+
+    /**
+     * @notice Get the Vault shares balance of a given account.
+     * @param _account Account to get the balance for
+     * @return uint256 Balance of the account
+     */
+    function _balanceOf(address _account) internal view returns (uint256) {
+        return _twabController.balanceOf(address(this), _account);
+    }
+
+    /**
+     * @notice Total amount of assets managed by this Vault.
+     * @return uint256 Total amount of assets
+     */
+    function _totalAssets() internal view returns (uint256) {
+        return _yieldVault.maxWithdraw(address(this));
+    }
+
+    /**
+     * @notice Total amount of shares minted by this Vault.
+     * @return uint256 Total amount of shares
+     */
+    function _totalSupply() internal view returns (uint256) {
+        return _twabController.totalSupply(address(this));
+    }
+
+    /* ============ Deposit Functions ============ */
 
     function _deposit(address _caller, address _receiver, uint256 _assets) internal returns (uint256) {
         // It is only possible to deposit when the vault is collateralized
@@ -56,6 +196,46 @@ contract Vault is IERC4626, ERC20Permit, Ownable, IVault {
         emit Deposit(_caller, _receiver, _assets, _assets);
         return _assets;
     }
+
+    /* ============ Max / Preview Functions ============ */
+
+    /**
+     * @notice Returns the maximum amount of underlying assets that can be deposited into the Vault.
+     * @dev We use type(uint96).max cause this is the type used to store balances in TwabController.
+     * @param _depositedAssets Assets deposited into the YieldVault
+     * @return uint256 Amount of underlying assets that can be deposited
+     */
+    function _maxDeposit(uint256 _depositedAssets) internal view returns (uint256) {
+        uint256 _vaultMaxDeposit = UINT96_MAX - _depositedAssets;
+        uint256 _yieldVaultMaxDeposit = _yieldVault.maxDeposit(address(this));
+
+        // Vault shares are minted 1:1 when the vault is collateralized,
+        // so maxDeposit and maxMint return the same value
+        return _yieldVaultMaxDeposit < _vaultMaxDeposit ? _yieldVaultMaxDeposit : _vaultMaxDeposit;
+    }
+
+    /**
+     * @notice Returns the maximum amount of the underlying asset that can be withdrawn
+     * from the owner balance in the Vault, through a withdraw call.
+     * @param _owner Address to check `maxWithdraw` for
+     * @return uint256 Amount of the underlying asset that can be withdrawn
+     */
+    function _maxWithdraw(address _owner) internal view returns (uint256) {
+        return _convertToAssets(_balanceOf(_owner), _totalSupply(), _totalAssets(), Math.Rounding.Down);
+    }
+
+    /**
+     * @notice Returns the maximum amount of Vault shares that can be redeemed
+     * from the owner balance in the Vault, through a redeem call.
+     * @param _owner Address to check `maxRedeem` for
+     * @return uint256 Amount of Vault shares that can be redeemed
+     */
+    function _maxRedeem(address _owner) internal view returns (uint256) {
+        return _balanceOf(_owner);
+    }
+
+    /* ============ State Functions ============ */
+
     /**
      * @notice Creates `_shares` tokens and assigns them to `_receiver`, increasing the total supply.
      * @dev Emits a {Transfer} event with `from` set to the zero address.
@@ -68,80 +248,118 @@ contract Vault is IERC4626, ERC20Permit, Ownable, IVault {
         emit Transfer(address(0), _receiver, _shares);
     }
 
-    /// inheritdoc IERC4626
     /**
-     * @dev Returns the address of the underlying token used for the Vault for accounting, depositing, and withdrawing.
-     *
-     * - MUST be an ERC-20 token contract.
-     * - MUST NOT revert.
+     * @notice Destroys `_shares` tokens from `_owner`, reducing the total supply.
+     * @dev Emits a {Transfer} event with `to` set to the zero address.
+     * @dev `_owner` cannot be the zero address.
+     * @dev `_owner` must have at least `_shares` tokens.
+     * @param _owner The owner of the shares
+     * @param _shares The shares to burn
      */
-    function asset() external view returns (address assetTokenAddress) {}
+    function _burn(address _owner, uint256 _shares) internal virtual override {
+        _twabController.burn(_owner, SafeCast.toUint96(_shares));
+        emit Transfer(_owner, address(0), _shares);
+    }
 
     /**
-     * @dev Returns the total amount of the underlying asset that is “managed” by Vault.
-     *
-     * - SHOULD include any compounding that occurs from yield.
-     * - MUST be inclusive of any fees that are charged against assets in the Vault.
-     * - MUST NOT revert.
+     * @notice Updates `_from` and `_to` TWAB balance for a transfer.
+     * @dev `_from` cannot be the zero address.
+     * @dev `_to` cannot be the zero address.
+     * @dev `_from` must have a balance of at least `_shares`.
+     * @param _from Address to transfer from
+     * @param _to Address to transfer to
+     * @param _shares Shares to transfer
      */
-    function totalAssets() external view returns (uint256 totalManagedAssets) {}
+    function _transfer(address _from, address _to, uint256 _shares) internal virtual override {
+        _twabController.transfer(_from, _to, SafeCast.toUint96(_shares));
+        emit Transfer(_from, _to, _shares);
+    }
+    /* ============ Conversion Functions ============ */
 
     /**
-     * @dev Returns the amount of shares that the Vault would exchange for the amount of assets provided, in an ideal
-     * scenario where all the conditions are met.
-     *
-     * - MUST NOT be inclusive of any fees that are charged against assets in the Vault.
-     * - MUST NOT show any variations depending on the caller.
-     * - MUST NOT reflect slippage or other on-chain conditions, when performing the actual exchange.
-     * - MUST NOT revert.
-     *
-     * NOTE: This calculation MAY NOT reflect the “per-user” price-per-share, and instead should reflect the
-     * “average-user’s” price-per-share, meaning what the average user should expect to see when exchanging to and
-     * from.
+     * @notice Convert assets to shares.
+     * @param _assets Amount of assets to convert
+     * @param _depositedAssets Assets deposited into the YieldVault
+     * @param _withdrawableAssets Assets withdrawable from the YieldVault
+     * @param _rounding Rounding mode (i.e. down or up)
+     * @return uint256 Amount of shares corresponding to the assets
      */
-    function convertToShares(uint256 assets) external view returns (uint256 shares) {}
+    function _convertToShares(
+        uint256 _assets,
+        uint256 _depositedAssets,
+        uint256 _withdrawableAssets,
+        Math.Rounding _rounding
+    ) internal pure returns (uint256) {
+        if (_assets == 0 || _depositedAssets == 0) {
+            return _assets;
+        }
+
+        uint256 _collateralAssets = _collateral(_depositedAssets, _withdrawableAssets);
+
+        return _collateralAssets == 0 ? 0 : _assets.mulDiv(_depositedAssets, _collateralAssets, _rounding);
+    }
 
     /**
-     * @dev Returns the amount of assets that the Vault would exchange for the amount of shares provided, in an ideal
-     * scenario where all the conditions are met.
-     *
-     * - MUST NOT be inclusive of any fees that are charged against assets in the Vault.
-     * - MUST NOT show any variations depending on the caller.
-     * - MUST NOT reflect slippage or other on-chain conditions, when performing the actual exchange.
-     * - MUST NOT revert.
-     *
-     * NOTE: This calculation MAY NOT reflect the “per-user” price-per-share, and instead should reflect the
-     * “average-user’s” price-per-share, meaning what the average user should expect to see when exchanging to and
-     * from.
+     * @notice Convert shares to assets.
+     * @param _shares Amount of shares to convert
+     * @param _depositedAssets Assets deposited into the YieldVault
+     * @param _withdrawableAssets Assets withdrawable from the YieldVault
+     * @param _rounding Rounding mode (i.e. down or up)
+     * @return uint256 Amount of assets corresponding to the shares
      */
-    function convertToAssets(uint256 shares) external view returns (uint256 assets) {}
+    function _convertToAssets(
+        uint256 _shares,
+        uint256 _depositedAssets,
+        uint256 _withdrawableAssets,
+        Math.Rounding _rounding
+    ) internal pure returns (uint256) {
+        if (_shares == 0 || _depositedAssets == 0) {
+            return _shares;
+        }
+
+        uint256 _collateralAssets = _collateral(_depositedAssets, _withdrawableAssets);
+
+        return _collateralAssets == 0 ? 0 : _shares.mulDiv(_collateralAssets, _depositedAssets, _rounding);
+    }
 
     /**
-     * @dev Returns the maximum amount of the underlying asset that can be deposited into the Vault for the receiver,
-     * through a deposit call.
-     *
-     * - MUST return a limited value if receiver is subject to some deposit limit.
-     * - MUST return 2 ** 256 - 1 if there is no limit on the maximum amount of assets that may be deposited.
-     * - MUST NOT revert.
+     * @notice Returns the quantity of withdrawable underlying assets held as collateral by the YieldVault.
+     * @dev When the Vault is collateralized, Vault shares are minted at a 1:1 ratio based on the user's deposited underlying assets.
+     *      The total supply of shares corresponds directly to the total amount of underlying assets deposited into the YieldVault.
+     *      Users have the ability to withdraw only the quantity of underlying assets they initially deposited,
+     *      without access to any of the accumulated yield within the YieldVault.
+     * @dev In case of undercollateralization, any remaining collateral within the YieldVault can be withdrawn.
+     *      Withdrawals can be made by users for their corresponding deposit shares.
+     * @param _depositedAssets Assets deposited into the YieldVault
+     * @param _withdrawableAssets Assets withdrawable from the YieldVault
+     * @return uint256 Available collateral
      */
-    function maxDeposit(address receiver) external view returns (uint256 maxAssets) {}
+    function _collateral(uint256 _depositedAssets, uint256 _withdrawableAssets) internal pure returns (uint256) {
+        // If the Vault is collateralized, users can only withdraw the amount of underlying assets they deposited.
+        if (_isVaultCollateralized(_depositedAssets, _withdrawableAssets)) {
+            return _depositedAssets;
+        }
+
+        // Otherwise, any remaining collateral within the YieldVault is available
+        // and distributed proportionally among depositors.
+        return _withdrawableAssets;
+    }
 
     /**
-     * @dev Allows an on-chain or off-chain user to simulate the effects of their deposit at the current block, given
-     * current on-chain conditions.
-     *
-     * - MUST return as close to and no more than the exact amount of Vault shares that would be minted in a deposit
-     *   call in the same transaction. I.e. deposit should return the same or more shares as previewDeposit if called
-     *   in the same transaction.
-     * - MUST NOT account for deposit limits like those returned from maxDeposit and should always act as though the
-     *   deposit would be accepted, regardless if the user has enough tokens approved, etc.
-     * - MUST be inclusive of deposit fees. Integrators should be aware of the existence of deposit fees.
-     * - MUST NOT revert.
-     *
-     * NOTE: any unfavorable discrepancy between convertToShares and previewDeposit SHOULD be considered slippage in
-     * share price or some other type of condition, meaning the depositor will lose assets by depositing.
+     * @notice Check if the Vault is collateralized.
+     * @dev The vault is collateralized if the total amount of underlying assets currently held by the YieldVault
+     *      is greater than or equal to the total supply of shares minted by the Vault.
+     * @param _depositedAssets Assets deposited into the YieldVault
+     * @param _withdrawableAssets Assets withdrawable from the YieldVault
+     * @return bool True if the vault is collateralized, false otherwise
      */
-    function previewDeposit(uint256 assets) external view returns (uint256 shares) {}
+    function _isVaultCollateralized(uint256 _depositedAssets, uint256 _withdrawableAssets)
+        internal
+        pure
+        returns (bool)
+    {
+        return _withdrawableAssets >= _depositedAssets;
+    }
 
     /**
      * @dev Mints shares Vault shares to receiver by depositing exactly amount of underlying tokens.
@@ -157,31 +375,6 @@ contract Vault is IERC4626, ERC20Permit, Ownable, IVault {
     function deposit(uint256 assets, address receiver) external returns (uint256) {
         return _deposit(msg.sender, receiver, assets);
     }
-
-    /**
-     * @dev Returns the maximum amount of the Vault shares that can be minted for the receiver, through a mint call.
-     * - MUST return a limited value if receiver is subject to some mint limit.
-     * - MUST return 2 ** 256 - 1 if there is no limit on the maximum amount of shares that may be minted.
-     * - MUST NOT revert.
-     */
-    function maxMint(address receiver) external view returns (uint256 maxShares) {}
-
-    /**
-     * @dev Allows an on-chain or off-chain user to simulate the effects of their mint at the current block, given
-     * current on-chain conditions.
-     *
-     * - MUST return as close to and no fewer than the exact amount of assets that would be deposited in a mint call
-     *   in the same transaction. I.e. mint should return the same or fewer assets as previewMint if called in the
-     *   same transaction.
-     * - MUST NOT account for mint limits like those returned from maxMint and should always act as though the mint
-     *   would be accepted, regardless if the user has enough tokens approved, etc.
-     * - MUST be inclusive of deposit fees. Integrators should be aware of the existence of deposit fees.
-     * - MUST NOT revert.
-     *
-     * NOTE: any unfavorable discrepancy between convertToAssets and previewMint SHOULD be considered slippage in
-     * share price or some other type of condition, meaning the depositor will lose assets by minting.
-     */
-    function previewMint(uint256 shares) external view returns (uint256 assets) {}
 
     /**
      * @dev Mints exactly shares Vault shares to receiver by depositing amount of underlying tokens.
@@ -203,33 +396,6 @@ contract Vault is IERC4626, ERC20Permit, Ownable, IVault {
     }
 
     /**
-     * @dev Returns the maximum amount of the underlying asset that can be withdrawn from the owner balance in the
-     * Vault, through a withdraw call.
-     *
-     * - MUST return a limited value if owner is subject to some withdrawal limit or timelock.
-     * - MUST NOT revert.
-     */
-    function maxWithdraw(address owner) external view returns (uint256 maxAssets) {}
-
-    /**
-     * @dev Allows an on-chain or off-chain user to simulate the effects of their withdrawal at the current block,
-     * given current on-chain conditions.
-     *
-     * - MUST return as close to and no fewer than the exact amount of Vault shares that would be burned in a withdraw
-     *   call in the same transaction. I.e. withdraw should return the same or fewer shares as previewWithdraw if
-     *   called
-     *   in the same transaction.
-     * - MUST NOT account for withdrawal limits like those returned from maxWithdraw and should always act as though
-     *   the withdrawal would be accepted, regardless if the user has enough shares, etc.
-     * - MUST be inclusive of withdrawal fees. Integrators should be aware of the existence of withdrawal fees.
-     * - MUST NOT revert.
-     *
-     * NOTE: any unfavorable discrepancy between convertToShares and previewWithdraw SHOULD be considered slippage in
-     * share price or some other type of condition, meaning the depositor will lose assets by depositing.
-     */
-    function previewWithdraw(uint256 assets) external view returns (uint256 shares) {}
-
-    /**
      * @dev Burns shares from owner and sends exactly assets of underlying tokens to receiver.
      *
      * - MUST emit the Withdraw event.
@@ -242,33 +408,6 @@ contract Vault is IERC4626, ERC20Permit, Ownable, IVault {
      * Those methods should be performed separately.
      */
     function withdraw(uint256 assets, address receiver, address owner) external returns (uint256 shares) {}
-
-    /**
-     * @dev Returns the maximum amount of Vault shares that can be redeemed from the owner balance in the Vault,
-     * through a redeem call.
-     *
-     * - MUST return a limited value if owner is subject to some withdrawal limit or timelock.
-     * - MUST return balanceOf(owner) if owner is not subject to any withdrawal limit or timelock.
-     * - MUST NOT revert.
-     */
-    function maxRedeem(address owner) external view returns (uint256 maxShares) {}
-
-    /**
-     * @dev Allows an on-chain or off-chain user to simulate the effects of their redeemption at the current block,
-     * given current on-chain conditions.
-     *
-     * - MUST return as close to and no more than the exact amount of assets that would be withdrawn in a redeem call
-     *   in the same transaction. I.e. redeem should return the same or more assets as previewRedeem if called in the
-     *   same transaction.
-     * - MUST NOT account for redemption limits like those returned from maxRedeem and should always act as though the
-     *   redemption would be accepted, regardless if the user has enough shares, etc.
-     * - MUST be inclusive of withdrawal fees. Integrators should be aware of the existence of withdrawal fees.
-     * - MUST NOT revert.
-     *
-     * NOTE: any unfavorable discrepancy between convertToAssets and previewRedeem SHOULD be considered slippage in
-     * share price or some other type of condition, meaning the depositor will lose assets by redeeming.
-     */
-    function previewRedeem(uint256 shares) external view returns (uint256 assets) {}
 
     /**
      * @dev Burns exactly shares from owner and sends assets of underlying tokens to receiver.
