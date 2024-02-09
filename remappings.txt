@@ -9,3 +9,5 @@ openzeppelin-contracts/=lib/openzeppelin-contracts/
 aave-v3-core/=lib/aave-v3-core/
 aave/periphery-v3/=lib/aave-v3-periphery/
 pooltogether/owner-manager-contracts/=lib/owner-manager-contracts/
+pt-v5-vault/=lib/pt-v5-vault/src/
+aave-address-book/=lib/aave-address-book/src/
