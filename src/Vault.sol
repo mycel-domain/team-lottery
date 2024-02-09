@@ -15,7 +15,7 @@ import {IVault} from "./interface/IVault.sol";
 
 contract Vault is IERC4626, ERC20Permit, Ownable, IVault {
     /// The maximum amount of shares that can be minted.
-    uint256 private constant UINT96_MAX = type(uint96).max;
+    uint256 private constant _UINT96_MAX = type(uint96).max;
 
     /// @notice Underlying asset decimals.
     uint8 private immutable _underlyingDecimals;
@@ -78,7 +78,76 @@ contract Vault is IERC4626, ERC20Permit, Ownable, IVault {
     function totalSupply() public view virtual override(ERC20, IERC20) returns (uint256) {
         return _totalSupply();
     }
+    /* ============ Deposit Functions ============ */
+    /**
+     * @dev Mints shares Vault shares to receiver by depositing exactly amount of underlying tokens.
+     *
+     * - MUST emit the Deposit event.
+     * - MAY support an additional flow in which the underlying tokens are owned by the Vault contract before the
+     *   deposit execution, and are accounted for during deposit.
+     * - MUST revert if all of assets cannot be deposited (due to deposit limit being reached, slippage, the user not
+     *   approving enough underlying tokens to the Vault contract, etc).
+     *
+     * NOTE: most implementations will require pre-approval of the Vault with the Vault’s underlying asset token.
+     */
 
+    function deposit(uint256 assets, address receiver) external returns (uint256) {
+        return _deposit(msg.sender, receiver, assets);
+    }
+
+    /**
+     * @dev Mints exactly shares Vault shares to receiver by depositing amount of underlying tokens.
+     *
+     * - MUST emit the Deposit event.
+     * - MAY support an additional flow in which the underlying tokens are owned by the Vault contract before the mint
+     *   execution, and are accounted for during mint.
+     * - MUST revert if all of shares cannot be minted (due to deposit limit being reached, slippage, the user not
+     *   approving enough underlying tokens to the Vault contract, etc).
+     *
+     * NOTE: most implementations will require pre-approval of the Vault with the Vault’s underlying asset token.
+     */
+    /**
+     * @inheritdoc IERC4626
+     * @dev Will revert if the Vault is under-collateralized.
+     */
+    function mint(uint256 _shares, address _receiver) external virtual override returns (uint256) {
+        return _deposit(msg.sender, _receiver, _shares);
+    }
+
+    /* ============ Withdraw Functions ============ */
+    /// @inheritdoc IERC4626
+    function withdraw(uint256 _assets, address _receiver, address _owner) external virtual override returns (uint256) {
+        if (_assets > _maxWithdraw(_owner)) {
+            revert WithdrawMoreThanMax(_owner, _assets, _maxWithdraw(_owner));
+        }
+
+        uint256 _depositedAssets = _totalSupply();
+        uint256 _withdrawableAssets = _totalAssets();
+        bool _vaultCollateralized = _isVaultCollateralized(_depositedAssets, _withdrawableAssets);
+
+        uint256 _shares = _vaultCollateralized
+            ? _assets
+            : _convertToShares(_assets, _depositedAssets, _withdrawableAssets, Math.Rounding.Up);
+
+        uint256 _withdrawnAssets = _redeem(msg.sender, _receiver, _owner, _shares, _assets, _vaultCollateralized);
+
+        if (_withdrawnAssets < _assets) revert WithdrawAssetsLTRequested(_assets, _withdrawnAssets);
+
+        return _shares;
+    }
+
+    /// @inheritdoc IERC4626
+    function redeem(uint256 _shares, address _receiver, address _owner) external virtual override returns (uint256) {
+        if (_shares > _maxRedeem(_owner)) revert RedeemMoreThanMax(_owner, _shares, _maxRedeem(_owner));
+
+        uint256 _depositedAssets = _totalSupply();
+        uint256 _withdrawableAssets = _totalAssets();
+        bool _vaultCollateralized = _isVaultCollateralized(_depositedAssets, _withdrawableAssets);
+
+        uint256 _assets = _convertToAssets(_shares, _depositedAssets, _withdrawableAssets, Math.Rounding.Down);
+
+        return _redeem(msg.sender, _receiver, _owner, _shares, _assets, _vaultCollateralized);
+    }
     /* ============ Conversion Functions ============ */
 
     /// @inheritdoc IERC4626
@@ -138,8 +207,8 @@ contract Vault is IERC4626, ERC20Permit, Ownable, IVault {
     /* ============================================ */
     /* ============ Internal Functions ============ */
     /* ============================================ */
-    /* ============ ERC20 / ERC4626 functions ============ */
 
+    /* ============ ERC20 / ERC4626 functions ============ */
     /**
      * @notice Fetch underlying asset decimals.
      * @dev Attempts to fetch the asset decimals. A return value of false indicates that the attempt failed in some way.
@@ -206,7 +275,7 @@ contract Vault is IERC4626, ERC20Permit, Ownable, IVault {
      * @return uint256 Amount of underlying assets that can be deposited
      */
     function _maxDeposit(uint256 _depositedAssets) internal view returns (uint256) {
-        uint256 _vaultMaxDeposit = UINT96_MAX - _depositedAssets;
+        uint256 _vaultMaxDeposit = _UINT96_MAX - _depositedAssets;
         uint256 _yieldVaultMaxDeposit = _yieldVault.maxDeposit(address(this));
 
         // Vault shares are minted 1:1 when the vault is collateralized,
@@ -232,6 +301,60 @@ contract Vault is IERC4626, ERC20Permit, Ownable, IVault {
      */
     function _maxRedeem(address _owner) internal view returns (uint256) {
         return _balanceOf(_owner);
+    }
+    /* ============ Redeem Function ============ */
+
+    /**
+     * @notice Redeem/Withdraw common flow
+     * @dev When the Vault is collateralized, shares are backed by assets 1:1, `withdraw` is used.
+     *      When the Vault is undercollateralized, shares are not backed by assets 1:1.
+     *      `redeem` is used to avoid burning too many YieldVault shares in exchange of assets.
+     * @param _caller Address of the caller
+     * @param _receiver Address of the receiver of the assets
+     * @param _owner Owner of the shares
+     * @param _shares Shares to burn
+     * @param _assets Assets to withdraw
+     * @param _vaultCollateralized Whether the Vault is collateralized or not
+     */
+    function _redeem(
+        address _caller,
+        address _receiver,
+        address _owner,
+        uint256 _shares,
+        uint256 _assets,
+        bool _vaultCollateralized
+    ) internal returns (uint256) {
+        if (_caller != _owner) {
+            _spendAllowance(_owner, _caller, _shares);
+        }
+
+        uint256 _yieldVaultShares;
+
+        if (!_vaultCollateralized) {
+            _yieldVaultShares = _shares.mulDiv(_yieldVault.maxRedeem(address(this)), _totalSupply(), Math.Rounding.Down);
+        }
+
+        // If _asset is ERC777, `transfer` can trigger a reentrancy AFTER the transfer happens through the
+        // `tokensReceived` hook. On the other hand, the `tokensToSend` hook, that is triggered before the transfer,
+        // calls the vault, which is assumed not malicious.
+        //
+        // Conclusion: we need to do the transfer after the burn so that any reentrancy would happen after the
+        // shares are burned and after the assets are transferred, which is a valid state.
+        _burn(_owner, _shares);
+
+        // If the Vault is collateralized, users can withdraw their deposit 1:1
+        if (_vaultCollateralized) {
+            _yieldVault.withdraw(_assets, _receiver, address(this));
+        } else {
+            // Otherwise, redeem is used to avoid burning too many YieldVault shares
+            _assets = _yieldVault.redeem(_yieldVaultShares, _receiver, address(this));
+        }
+
+        if (_assets == 0) revert WithdrawZeroAssets();
+
+        emit Withdraw(_caller, _receiver, _owner, _assets, _shares);
+
+        return _assets;
     }
 
     /* ============ State Functions ============ */
@@ -360,66 +483,4 @@ contract Vault is IERC4626, ERC20Permit, Ownable, IVault {
     {
         return _withdrawableAssets >= _depositedAssets;
     }
-
-    /**
-     * @dev Mints shares Vault shares to receiver by depositing exactly amount of underlying tokens.
-     *
-     * - MUST emit the Deposit event.
-     * - MAY support an additional flow in which the underlying tokens are owned by the Vault contract before the
-     *   deposit execution, and are accounted for during deposit.
-     * - MUST revert if all of assets cannot be deposited (due to deposit limit being reached, slippage, the user not
-     *   approving enough underlying tokens to the Vault contract, etc).
-     *
-     * NOTE: most implementations will require pre-approval of the Vault with the Vault’s underlying asset token.
-     */
-    function deposit(uint256 assets, address receiver) external returns (uint256) {
-        return _deposit(msg.sender, receiver, assets);
-    }
-
-    /**
-     * @dev Mints exactly shares Vault shares to receiver by depositing amount of underlying tokens.
-     *
-     * - MUST emit the Deposit event.
-     * - MAY support an additional flow in which the underlying tokens are owned by the Vault contract before the mint
-     *   execution, and are accounted for during mint.
-     * - MUST revert if all of shares cannot be minted (due to deposit limit being reached, slippage, the user not
-     *   approving enough underlying tokens to the Vault contract, etc).
-     *
-     * NOTE: most implementations will require pre-approval of the Vault with the Vault’s underlying asset token.
-     */
-    /**
-     * @inheritdoc IERC4626
-     * @dev Will revert if the Vault is under-collateralized.
-     */
-    function mint(uint256 _shares, address _receiver) external virtual override returns (uint256) {
-        return _deposit(msg.sender, _receiver, _shares);
-    }
-
-    /**
-     * @dev Burns shares from owner and sends exactly assets of underlying tokens to receiver.
-     *
-     * - MUST emit the Withdraw event.
-     * - MAY support an additional flow in which the underlying tokens are owned by the Vault contract before the
-     *   withdraw execution, and are accounted for during withdraw.
-     * - MUST revert if all of assets cannot be withdrawn (due to withdrawal limit being reached, slippage, the owner
-     *   not having enough shares, etc).
-     *
-     * Note that some implementations will require pre-requesting to the Vault before a withdrawal may be performed.
-     * Those methods should be performed separately.
-     */
-    function withdraw(uint256 assets, address receiver, address owner) external returns (uint256 shares) {}
-
-    /**
-     * @dev Burns exactly shares from owner and sends assets of underlying tokens to receiver.
-     *
-     * - MUST emit the Withdraw event.
-     * - MAY support an additional flow in which the underlying tokens are owned by the Vault contract before the
-     *   redeem execution, and are accounted for during redeem.
-     * - MUST revert if all of shares cannot be redeemed (due to withdrawal limit being reached, slippage, the owner
-     *   not having enough shares, etc).
-     *
-     * NOTE: some implementations will require pre-requesting to the Vault before a withdrawal may be performed.
-     * Those methods should be performed separately.
-     */
-    function redeem(uint256 shares, address receiver, address owner) external returns (uint256 assets) {}
 }
