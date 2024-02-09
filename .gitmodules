@@ -16,3 +16,12 @@
 [submodule "lib/owner-manager-contracts"]
 	path = lib/owner-manager-contracts
 	url = https://github.com/pooltogether/owner-manager-contracts
+[submodule "lib/pt-v5-twab-controller"]
+	path = lib/pt-v5-twab-controller
+	url = https://github.com/GenerationSoftware/pt-v5-twab-controller
+[submodule "lib/pt-v5-vault"]
+	path = lib/pt-v5-vault
+	url = https://github.com/GenerationSoftware/pt-v5-vault
+[submodule "lib/aave-address-book"]
+	path = lib/aave-address-book
+	url = https://github.com/bgd-labs/aave-address-book
