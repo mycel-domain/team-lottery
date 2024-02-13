@@ -24,7 +24,7 @@ sequenceDiagram
 
 ### Determine winning team → distribute prize
 
-```
+```mermaid
 sequenceDiagram
 
 participant users as Users
