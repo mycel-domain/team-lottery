@@ -6,7 +6,6 @@ import {IERC20} from "openzeppelin/token/ERC20/ERC20.sol";
 import {IERC4626} from "openzeppelin-contracts/contracts/interfaces/IERC4626.sol";
 import {TwabController, SPONSORSHIP_ADDRESS} from "pt-v5-twab-controller/TwabController.sol";
 import {VaultHooks} from "pt-v5-vault/interfaces/IVaultHooks.sol";
-import {PrizePool} from "../PrizePool.sol";
 
 interface IVault {
     /* ============ Events ============ */
@@ -18,7 +17,6 @@ interface IVault {
      * @param symbol Symbol of the ERC20 share minted by the vault
      * @param twabController Address of the TwabController used to keep track of balances
      * @param yieldVault Address of the ERC4626 vault in which assets are deposited to generate yield
-     * @param prizePool Address of the PrizePool that computes prizes
      * @param claimer Address of the claimer
      * @param yieldFeeRecipient Address of the yield fee recipient
      * @param yieldFeePercentage Yield fee percentage in integer format with 1e9 precision (50% would be 5e8)
@@ -30,7 +28,6 @@ interface IVault {
         string symbol,
         TwabController twabController,
         IERC4626 indexed yieldVault,
-        PrizePool indexed prizePool,
         address claimer,
         address yieldFeeRecipient,
         uint256 yieldFeePercentage,

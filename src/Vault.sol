@@ -10,10 +10,13 @@ import {SafeCast} from "openzeppelin-contracts/contracts/utils/math/SafeCast.sol
 import {Math} from "openzeppelin-contracts/contracts/utils/math/Math.sol";
 import {Ownable} from "owner-manager-contracts/Ownable.sol";
 import {TwabController, SPONSORSHIP_ADDRESS} from "pt-v5-twab-controller/TwabController.sol";
-import {PrizePool} from "./PrizePool.sol";
 import {IVault} from "./interface/IVault.sol";
 
 contract Vault is IERC4626, ERC20Permit, Ownable, IVault {
+    using Math for uint256;
+    using SafeCast for uint256;
+    using SafeERC20 for IERC20;
+
     /// The maximum amount of shares that can be minted.
     uint256 private constant _UINT96_MAX = type(uint96).max;
 
@@ -23,33 +26,49 @@ contract Vault is IERC4626, ERC20Permit, Ownable, IVault {
     /// @notice Address of the ERC4626 vault generating yield.
     IERC4626 private immutable _yieldVault;
 
-    /// @notice Address of the PrizePool that computes prizes.
-    PrizePool private immutable _prizePool;
-
     /// @notice Address of the underlying asset used by the Vault.
     IERC20 private immutable _asset;
 
     /// @notice Address of the TwabController used to keep track of balances.
     TwabController private immutable _twabController;
 
-    using Math for uint256;
-    using SafeCast for uint256;
-    using SafeERC20 for IERC20;
+    uint8 public teamCount;
+
+    enum Tier {
+        Tier1,
+        Tier2
+    }
+
+    struct Team {
+        uint8 teamId;
+        Tier tier;
+        address owner;
+        address[] members;
+        uint256 totalDeposits;
+    }
+
+    /// mapping address owner => Tier tier => Team
+    mapping(address => mapping(Tier => Team)) team;
+
+    /// array of Team
+    Team[] public teams;
 
     constructor(
         IERC20 asset_,
         string memory name_,
         string memory symbol_,
+        TwabController twabController_,
         IERC4626 yieldVault_,
-        PrizePool prizePool_,
+        address claimer_,
+        address yieldFeeRecipient_,
+        uint256 yieldFeePercentage_,
         address owner_
     ) ERC20(name_, symbol_) ERC20Permit(name_) Ownable(owner_) {
         _asset = asset_;
         _yieldVault = yieldVault_;
-        _prizePool = prizePool_;
-
-        TwabController twabController_ = prizePool_.twabController();
         _twabController = twabController_;
+
+        emit NewVault(asset_, name_, symbol_, twabController_, yieldVault_, claimer_, yieldFeeRecipient_, yieldFeePercentage_, owner_);
     }
 
     /* ============ ERC20 / ERC4626 functions ============ */
