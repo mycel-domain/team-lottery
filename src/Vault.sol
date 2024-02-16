@@ -10,7 +10,9 @@ import {SafeCast} from "openzeppelin-contracts/contracts/utils/math/SafeCast.sol
 import {Math} from "openzeppelin-contracts/contracts/utils/math/Math.sol";
 import {Ownable} from "owner-manager-contracts/Ownable.sol";
 import {TwabController, SPONSORSHIP_ADDRESS} from "pt-v5-twab-controller/TwabController.sol";
+
 import {IVault} from "./interface/IVault.sol";
+import {Draw} from "./Draw.sol";
 
 contract Vault is IERC4626, ERC20Permit, Ownable, IVault {
     using Math for uint256;
@@ -32,27 +34,6 @@ contract Vault is IERC4626, ERC20Permit, Ownable, IVault {
     /// @notice Address of the TwabController used to keep track of balances.
     TwabController private immutable _twabController;
 
-    uint8 public teamCount;
-
-    enum Tier {
-        Tier1,
-        Tier2
-    }
-
-    struct Team {
-        uint8 teamId;
-        Tier tier;
-        address owner;
-        address[] members;
-        uint256 totalDeposits;
-    }
-
-    /// mapping address owner => Tier tier => Team
-    mapping(address => mapping(Tier => Team)) team;
-
-    /// array of Team
-    Team[] public teams;
-
     constructor(
         IERC20 asset_,
         string memory name_,
@@ -68,7 +49,17 @@ contract Vault is IERC4626, ERC20Permit, Ownable, IVault {
         _yieldVault = yieldVault_;
         _twabController = twabController_;
 
-        emit NewVault(asset_, name_, symbol_, twabController_, yieldVault_, claimer_, yieldFeeRecipient_, yieldFeePercentage_, owner_);
+        emit NewVault(
+            asset_,
+            name_,
+            symbol_,
+            twabController_,
+            yieldVault_,
+            claimer_,
+            yieldFeeRecipient_,
+            yieldFeePercentage_,
+            owner_
+        );
     }
 
     /* ============ ERC20 / ERC4626 functions ============ */
