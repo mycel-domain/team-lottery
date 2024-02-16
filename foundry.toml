@@ -9,4 +9,5 @@ gas_reports = ["*"]
 [rpc_endpoints]
 basemainnet = "${BASE_MAINNET_RPC_URL}"
 basesepolia = "${BASE_SEP_RPC_URL}"
+# https://book.getfoundry.sh/cheatcodes/rpc
 # See more config options https://github.com/foundry-rs/foundry/blob/master/crates/config/README.md#all-options
