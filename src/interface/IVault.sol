@@ -3,7 +3,7 @@
 pragma solidity ^0.8.20;
 
 import {IERC20} from "openzeppelin/token/ERC20/ERC20.sol";
-import {IERC4626} from "openzeppelin-contracts/contracts/interfaces/IERC4626.sol";
+import {IERC4626} from "openzeppelin-contracts/interfaces/IERC4626.sol";
 import {TwabController, SPONSORSHIP_ADDRESS} from "pt-v5-twab-controller/TwabController.sol";
 import {VaultHooks} from "pt-v5-vault/interfaces/IVaultHooks.sol";
 
@@ -47,7 +47,11 @@ interface IVault {
      * @param recipient Address receiving the Vault shares
      * @param shares Amount of shares minted to `recipient`
      */
-    event MintYieldFee(address indexed caller, address indexed recipient, uint256 shares);
+    event MintYieldFee(
+        address indexed caller,
+        address indexed recipient,
+        uint256 shares
+    );
 
     /**
      * @notice Emitted when a new yield fee recipient has been set.
@@ -138,7 +142,10 @@ interface IVault {
      * @param requestedAssets The amount of assets requested
      * @param withdrawnAssets The amount of assets withdrawn from the YieldVault
      */
-    error WithdrawAssetsLTRequested(uint256 requestedAssets, uint256 withdrawnAssets);
+    error WithdrawAssetsLTRequested(
+        uint256 requestedAssets,
+        uint256 withdrawnAssets
+    );
 
     /// @notice Emitted when `sweep` is called but no underlying assets are currently held by the Vault.
     error SweepZeroAssets();
@@ -162,7 +169,10 @@ interface IVault {
      * @param tokenOut The provided tokenOut address
      * @param vaultShare The vault share token address
      */
-    error LiquidationTokenOutNotVaultShare(address tokenOut, address vaultShare);
+    error LiquidationTokenOutNotVaultShare(
+        address tokenOut,
+        address vaultShare
+    );
 
     /// @notice Emitted during the liquidation process when the liquidation amount out is zero.
     error LiquidationAmountOutZero();
@@ -172,7 +182,10 @@ interface IVault {
      * @param amountOut The amount out
      * @param availableYield The available yield
      */
-    error LiquidationAmountOutGTYield(uint256 amountOut, uint256 availableYield);
+    error LiquidationAmountOutGTYield(
+        uint256 amountOut,
+        uint256 availableYield
+    );
 
     /// @notice Emitted when the Vault is under-collateralized.
     error VaultUndercollateralized();
@@ -215,7 +228,10 @@ interface IVault {
      * @param yieldFeePercentage The yield fee percentage in integer format
      * @param maxYieldFeePercentage The max yield fee percentage in integer format (this value is equal to 1 in decimal format)
      */
-    error YieldFeePercentageGtePrecision(uint256 yieldFeePercentage, uint256 maxYieldFeePercentage);
+    error YieldFeePercentageGtePrecision(
+        uint256 yieldFeePercentage,
+        uint256 maxYieldFeePercentage
+    );
 
     /**
      * @notice Emitted when the BeforeClaim prize hook fails
@@ -247,5 +263,10 @@ interface IVault {
      * @param amount The amount of assets permitted
      * @param allowance The allowance after the permit was called
      */
-    error PermitAllowanceNotSet(address owner, address spender, uint256 amount, uint256 allowance);
+    error PermitAllowanceNotSet(
+        address owner,
+        address spender,
+        uint256 amount,
+        uint256 allowance
+    );
 }

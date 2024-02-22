@@ -2,15 +2,18 @@
 
 pragma solidity ^0.8.20;
 
-import {IERC4626} from "openzeppelin-contracts/contracts/interfaces/IERC4626.sol";
-import {ERC20, IERC20, IERC20Metadata} from "openzeppelin-contracts/contracts/token/ERC20/ERC20.sol";
+import {IERC4626} from "openzeppelin-contracts/interfaces/IERC4626.sol";
+import {ERC20, IERC20, IERC20Metadata} from "openzeppelin-contracts/token/ERC20/ERC20.sol";
 import {Vault} from "./Vault.sol";
 import {TwabController} from "pt-v5-twab-controller/TwabController.sol";
 
 contract VaultFactory {
     Vault[] public allVaults;
 
-    event NewFactoryVault(Vault indexed vault, VaultFactory indexed vaultFactory);
+    event NewFactoryVault(
+        Vault indexed vault,
+        VaultFactory indexed vaultFactory
+    );
 
     /**
      * @notice Mapping to store deployer nonces for CREATE2
@@ -28,7 +31,11 @@ contract VaultFactory {
         uint256 yieldFeePercentage_,
         address owner_
     ) external returns (address) {
-        Vault newVault = new Vault{salt: keccak256(abi.encode(msg.sender, deployerNonces[msg.sender]++))}(
+        Vault newVault = new Vault{
+            salt: keccak256(
+                abi.encode(msg.sender, deployerNonces[msg.sender]++)
+            )
+        }(
             asset_,
             name_,
             symbol_,
