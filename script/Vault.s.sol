@@ -6,9 +6,9 @@ import {Script, console2} from "forge-std/Script.sol";
 import {TwabController} from "pt-v5-twab-controller/TwabController.sol";
 import {ERC20, IERC20, IERC20Metadata} from "openzeppelin-contracts/token/ERC20/ERC20.sol";
 import {IERC4626} from "openzeppelin-contracts/interfaces/IERC4626.sol";
-import {Vault} from "../src/Vault.sol";
+import {VaultV2 as Vault} from "../src/VaultV2.sol";
 
-//  forge script script/Vault.s.sol:DeployVault --rpc-url $OPGOERLI_RPC_UR --broadcast -vvvv --etherscan-api-key $ETHERSCAN_OPTIMISM_API_KEY --verify
+// forge script script/Vault.s.sol:DeployVault --rpc-url $OPGOERLI_RPC_UR --broadcast -vvvv --etherscan-api-key $ETHERSCAN_OPTIMISM_API_KEY --verify
 
 contract DeployVault is Script {
     uint256 deployerPrivateKey = vm.envUint("DEPLOYER_PRIVATE_KEY");
