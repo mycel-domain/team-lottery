@@ -5,6 +5,7 @@ libs = ["lib"]
 optimizer = true
 optimizer-runs = 1_000
 gas_reports = ["*"]
+no_match_test="fork"
 
 [rpc_endpoints]
 basemainnet = "${BASE_MAINNET_RPC_URL}"

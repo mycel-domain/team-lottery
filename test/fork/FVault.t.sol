@@ -38,12 +38,12 @@ contract FVaultTest is Test {
         );
     }
 
-    function test_deployVault() public {
+    function test_forkDeployVault() public {
         VaultV2 vault = __deployVaultV2();
         console2.log("Vault deployed at: ", address(vault));
     }
 
-    function test_weth() public {
+    function test_forkWETH() public {
         UNDERLYING_ASSET_ADDRESS.balanceOf(_owner);
         vm.deal(_owner, 1 ether);
         vm.startPrank(_owner);
@@ -54,7 +54,7 @@ contract FVaultTest is Test {
         assertEq(weth.allowance(_owner, address(this)), 0.1 ether);
     }
 
-    function test_deposit() public {
+    function test_forkDeposit() public {
         VaultV2 vault = __deployVaultV2();
         vm.deal(_owner, 1 ether);
         vm.deal(address(this), 1 ether);
