@@ -13,3 +13,5 @@ pooltogether/owner-manager-contracts/=lib/owner-manager-contracts/
 pt-v5-vault/=lib/pt-v5-vault/src/
 pt-v5-twab-controller/=lib/pt-v5-twab-controller/src/
 aave-address-book/=lib/aave-address-book/src/
+
+yield-daddy/=lib/yield-daddy/src/
