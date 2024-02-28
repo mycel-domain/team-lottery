@@ -1,0 +1,10 @@
+{
+  "name": "teamlottery",
+  "version": "1.0.0",
+  "description": "Team Lottery Smart Contract",
+  "scripts": {
+    "build": "forge build",
+    "compile": "forge compile",
+    "test": "forge test --no-match-contract Fork"
+  }
+}

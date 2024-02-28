@@ -13,7 +13,7 @@ import {VaultV2} from "../../src/VaultV2.sol";
 import {IWETH} from "../interfaces/IWETH.sol";
 import {IFaucet} from "../interfaces/IFaucet.sol";
 
-contract FVaultTest is Test {
+contract ForkMainnetVault is Test {
     address _claimer = 0x06aa005386F53Ba7b980c61e0D067CaBc7602a62;
     address _yieldFeeRecipient = 0x06aa005386F53Ba7b980c61e0D067CaBc7602a62;
     address _owner = 0x06aa005386F53Ba7b980c61e0D067CaBc7602a62;
