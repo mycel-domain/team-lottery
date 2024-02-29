@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.19;
+pragma solidity ^0.8.20;
 
 import {ERC20, IERC20, IERC20Metadata} from "openzeppelin-contracts/token/ERC20/ERC20.sol";
 import {IERC4626} from "openzeppelin-contracts/interfaces/IERC4626.sol";
@@ -9,18 +9,38 @@ import {SafeCast} from "openzeppelin-contracts/utils/math/SafeCast.sol";
 import {Math} from "openzeppelin-contracts/utils/math/Math.sol";
 import {Ownable} from "owner-manager-contracts/Ownable.sol";
 import {TwabController, SPONSORSHIP_ADDRESS} from "pt-v5-twab-controller/TwabController.sol";
-
 import {VaultHooks} from "pt-v5-vault/interfaces/IVaultHooks.sol";
-import {IVault} from "./interface/IVault.sol";
-import {Draw} from "./Draw.sol";
-// ref: https://github.com/GenerationSoftware/pt-v5-vault/blob/97f5fd14e9d25c704b9d7da87c4d9d996b7dec41/src/Vault.sol#L1214
+import {SD59x18, sd, unwrap, convert} from "prb-math/SD59x18.sol";
 
+import {DrawCalculation} from "./libraries/Draw.sol";
+import {IVault} from "./interface/IVault.sol";
+
+// ref: https://github.com/GenerationSoftware/pt-v5-vault/blob/97f5fd14e9d25c704b9d7da87c4d9d996b7dec41/src/Vault.sol
 contract VaultV2 is IERC4626, ERC20Permit, Ownable, IVault {
     using Math for uint256;
     using SafeCast for uint256;
     using SafeERC20 for IERC20;
 
+    struct Draw {
+        uint24 drawId;
+        uint256 drawStartTime;
+        uint256 drawEndTime;
+        uint256 availableYieldAtStart;
+        uint256 availableYieldAtEnd;
+        bool isFinalized;
+    }
+    struct Team {
+        uint8 teamId;
+        SD59x18 teamOdds; //TODO:
+        SD59x18 teamContributionFraction; //TODO:
+        address[] teamMembers;
+    }
+
     /* ============ Variables ============ */
+
+    Draw[] public draws;
+
+    uint24 public currentDrawId = 1;
 
     /// The maximum amount of shares that can be minted.
     uint256 private constant UINT96_MAX = type(uint96).max;
@@ -64,6 +84,20 @@ contract VaultV2 is IERC4626, ERC20Permit, Ownable, IVault {
 
     /// @notice Maps user addresses to hooks that they want to execute when prizes are won.
     mapping(address => VaultHooks) internal _hooks;
+
+    mapping(uint24 => uint8[]) public drawIdToWinningTeamIds;
+
+    mapping(uint24 => Team[]) public drawIdToWinningTeams;
+
+    mapping(uint24 => mapping(uint8 => uint256))
+        public drawIdToWinningTeamPrizes;
+
+    mapping(uint24 => mapping(uint8 => uint256)) public drawIdToWinningTeamTwab;
+
+    mapping(uint24 => mapping(uint8 => bool))
+        public drawIdToWinningTeamIsClaimed;
+
+    mapping(uint24 => Draw) public drawIdToDraw;
 
     /* ============ Modifiers ============ */
 
@@ -573,7 +607,175 @@ contract VaultV2 is IERC4626, ERC20Permit, Ownable, IVault {
         emit MintYieldFee(msg.sender, yieldFeeRecipient_, _shares);
     }
 
-    /* ============ Liquidation Functions ============ */
+    /* ============ Draw Functions ============ */
+
+    function startDrawPeriod(uint256 drawStartTime) external onlyOwner {
+        uint256 drawEndTime = drawStartTime + 7 days;
+        if (block.timestamp > drawStartTime) {
+            revert InvalidDrawPeriod(block.timestamp, drawStartTime);
+        }
+
+        // TODO: check if the previous draw is finalized
+        Draw memory draw = Draw({
+            drawId: currentDrawId,
+            drawStartTime: drawStartTime,
+            drawEndTime: drawEndTime,
+            availableYieldAtStart: _availableYieldBalance(),
+            availableYieldAtEnd: 0,
+            isFinalized: false
+        });
+
+        draws.push(draw);
+        drawIdToDraw[currentDrawId] = draw;
+    }
+
+    function finalizeDraw(
+        bytes memory _data,
+        uint24 drawId
+    ) external onlyOwner {
+        if (block.timestamp < drawIdToDraw[drawId].drawEndTime) {
+            revert InvalidDrawPeriod(
+                block.timestamp,
+                drawIdToDraw[drawId].drawEndTime
+            );
+        }
+        if (drawIdToDraw[drawId].isFinalized) {
+            revert AlreadyFinalized();
+        }
+        Team[] memory teams = abi.decode(_data, (Team[]));
+        Draw storage draw = drawIdToDraw[drawId];
+        draw.availableYieldAtEnd = _availableYieldBalance();
+
+        uint256 vaultTwabTotalSupply = _twabController
+            .getTotalSupplyTwabBetween(
+                address(this),
+                draw.drawStartTime,
+                draw.drawEndTime
+            );
+
+        for (uint256 i = 0; i < teams.length; i++) {
+            Team memory team = teams[i];
+
+            uint256 teamSpecificRandomNumber = DrawCalculation
+                .calculatePseudoRandomNumber(
+                    drawId,
+                    address(this),
+                    team.teamId,
+                    vaultTwabTotalSupply,
+                    0 //TODO: uint256 _winningRandomNumber
+                );
+
+            uint256 teamTwab = _calculateTeamTwabBetween(
+                team.teamMembers,
+                drawId
+            );
+
+            (bool isWinner, , ) = DrawCalculation.isWinner(
+                teamSpecificRandomNumber,
+                teamTwab,
+                vaultTwabTotalSupply,
+                team.teamContributionFraction,
+                team.teamOdds
+            );
+
+            if (isWinner) {
+                drawIdToWinningTeamIds[drawId].push(team.teamId);
+                drawIdToWinningTeamTwab[drawId][team.teamId] = teamTwab;
+                drawIdToWinningTeams[drawId].push(team);
+            }
+        }
+        _finalizeTeamPrize(drawId);
+        draw.isFinalized = true;
+        currentDrawId++;
+
+        emit DrawFinalized(drawId, drawIdToWinningTeamIds[drawId]);
+    }
+
+    function _finalizeTeamPrize(uint24 drawId) internal {
+        Draw storage draw = drawIdToDraw[drawId];
+        uint8[] memory winningTeams = drawIdToWinningTeamIds[drawId];
+        uint256 prize = draw.availableYieldAtEnd - draw.availableYieldAtStart;
+        uint256 winningTeamTotalTwab = 0;
+
+        for (uint256 i = 0; i < winningTeams.length; i++) {
+            uint256 teamTwab = drawIdToWinningTeamTwab[drawId][winningTeams[i]];
+
+            winningTeamTotalTwab += teamTwab;
+        }
+        for (uint256 i = 0; i < winningTeams.length; i++) {
+            uint256 teamTwab = drawIdToWinningTeamTwab[drawId][winningTeams[i]];
+
+            uint256 teamPrize = (prize * teamTwab) / winningTeamTotalTwab;
+            drawIdToWinningTeamPrizes[drawId][winningTeams[i]] = teamPrize;
+        }
+    }
+
+    function distributePrizes(uint24 drawId) external onlyOwner {
+        uint8[] memory winningTeams = drawIdToWinningTeamIds[drawId];
+
+        // withdraw prize from yield vault to this contract
+        _yieldVault.withdraw(
+            drawIdToDraw[drawId].availableYieldAtEnd,
+            address(this),
+            address(this)
+        );
+        for (uint256 i = 0; i < winningTeams.length; i++) {
+            uint256 teamPrize = drawIdToWinningTeamPrizes[drawId][
+                winningTeams[i]
+            ];
+
+            address[] memory teamMembers = drawIdToWinningTeams[drawId][i]
+                .teamMembers;
+            uint256 totalTeamTwab = drawIdToWinningTeamTwab[drawId][
+                winningTeams[i]
+            ];
+
+            for (uint256 j = 0; j < teamMembers.length; j++) {
+                uint256 memberTwab = _twabController.getTwabBetween(
+                    address(this),
+                    teamMembers[j],
+                    drawIdToDraw[drawId].drawStartTime,
+                    drawIdToDraw[drawId].drawEndTime
+                );
+                uint256 memberPrize = (teamPrize * memberTwab) / totalTeamTwab;
+
+                _asset.safeTransfer(teamMembers[j], memberPrize);
+                emit PrizeDistributed(
+                    drawId,
+                    winningTeams[i],
+                    teamMembers[j],
+                    memberPrize
+                );
+            }
+
+            drawIdToWinningTeamIsClaimed[drawId][winningTeams[i]] = true;
+        }
+    }
+
+    function _calculateTeamTwabBetween(
+        address[] memory teamMembers,
+        uint24 drawId
+    ) internal view returns (uint256) {
+        uint256 teamTwab = 0;
+
+        Draw storage draw = drawIdToDraw[drawId];
+        for (uint256 i = 0; i < teamMembers.length; i++) {
+            teamTwab += _twabController.getTwabBetween(
+                address(this),
+                teamMembers[i],
+                draw.drawStartTime,
+                draw.drawEndTime
+            );
+        }
+
+        return teamTwab;
+    }
+
+    function getWinningTeams(
+        uint24 drawId
+    ) external view returns (Team[] memory) {
+        return drawIdToWinningTeams[drawId];
+    }
 
     /* ============ State Function ============ */
 

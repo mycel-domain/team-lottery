@@ -80,6 +80,22 @@ interface IVault {
      */
     event Sweep(address indexed caller, uint256 assets);
 
+    /**
+     * @notice Emitted when a user sweeps assets held by the Vault into the YieldVault.
+     * @param drawId The draw id
+     * @param teamId The team id
+     * @param recipient The recipient of the prize
+     * @param amount The amount of the prize
+     */
+    event PrizeDistributed(
+        uint24 indexed drawId,
+        uint8 indexed teamId,
+        address recipient,
+        uint256 amount
+    );
+
+    event DrawFinalized(uint24 indexed drawId, uint8[] winningTeams);
+
     /* ============ Errors ============ */
 
     /// @notice Emitted when the Yield Vault is set to the zero address.
@@ -269,4 +285,8 @@ interface IVault {
         uint256 amount,
         uint256 allowance
     );
+
+    error InvalidDrawPeriod(uint256 timestamp, uint256 drawPeriod);
+
+    error AlreadyFinalized();
 }
