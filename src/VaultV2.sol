@@ -696,48 +696,6 @@ contract VaultV2 is IERC4626, ERC20Permit, Ownable, IVault {
         emit DrawFinalized(drawId, drawIdToWinningTeamIds[drawId]);
     }
 
-    function _calculateTeamOdds(
-        Team[] memory teams,
-        uint24 drawId,
-        uint256 vaultTwabTotalSupply
-    ) internal view returns (SD59x18[] memory odds) {
-        odds = new SD59x18[](teams.length);
-        SD59x18 convertedTotalSupply = convert(int256(vaultTwabTotalSupply));
-
-        for (uint256 i = 0; i < teams.length; i++) {
-            uint256 teamTwab = _calculateTeamTwabBetween(
-                teams[i].teamMembers,
-                drawId
-            );
-            SD59x18 convertedTeamWab = convert(int256(teamTwab));
-            SD59x18 teamOdds = sd(1e18) -
-                (convertedTeamWab / convertedTotalSupply);
-
-            odds[i] = teamOdds;
-        }
-
-        return odds;
-    }
-
-    function _finalizeTeamPrize(uint24 drawId) internal {
-        Draw storage draw = drawIdToDraw[drawId];
-        uint8[] memory winningTeams = drawIdToWinningTeamIds[drawId];
-        uint256 prize = draw.availableYieldAtEnd - draw.availableYieldAtStart;
-        uint256 winningTeamTotalTwab = 0;
-
-        for (uint256 i = 0; i < winningTeams.length; i++) {
-            uint256 teamTwab = drawIdToWinningTeamTwab[drawId][winningTeams[i]];
-
-            winningTeamTotalTwab += teamTwab;
-        }
-        for (uint256 i = 0; i < winningTeams.length; i++) {
-            uint256 teamTwab = drawIdToWinningTeamTwab[drawId][winningTeams[i]];
-
-            uint256 teamPrize = (prize * teamTwab) / winningTeamTotalTwab;
-            drawIdToWinningTeamPrizes[drawId][winningTeams[i]] = teamPrize;
-        }
-    }
-
     function distributePrizes(uint24 drawId) external onlyOwner {
         uint8[] memory winningTeams = drawIdToWinningTeamIds[drawId];
 
@@ -780,6 +738,66 @@ contract VaultV2 is IERC4626, ERC20Permit, Ownable, IVault {
         }
     }
 
+    function calculateTeamOdds(
+        Team[] memory teams,
+        uint24 drawId,
+        uint256 vaultTwabTotalSupply
+    ) external view returns (SD59x18[] memory) {
+        return _calculateTeamOdds(teams, drawId, vaultTwabTotalSupply);
+    }
+
+    function getWinningTeams(
+        uint24 drawId
+    ) external view returns (Team[] memory) {
+        return drawIdToWinningTeams[drawId];
+    }
+
+    function _calculateTeamOdds(
+        Team[] memory teams,
+        uint24 drawId,
+        uint256 vaultTwabTotalSupply
+    ) internal view returns (SD59x18[] memory odds) {
+        odds = new SD59x18[](teams.length);
+        SD59x18 convertedTotalSupply = convert(int256(vaultTwabTotalSupply));
+
+        for (uint256 i = 0; i < teams.length; i++) {
+            uint256 teamTwab = _calculateTeamTwabBetween(
+                teams[i].teamMembers,
+                drawId
+            );
+            SD59x18 convertedTeamWab = convert(int256(teamTwab));
+            SD59x18 teamOdds = sd(1e18) -
+                (convertedTeamWab / convertedTotalSupply);
+
+            odds[i] = teamOdds;
+        }
+
+        return odds;
+    }
+
+    function _finalizeTeamPrize(uint24 drawId) internal {
+        Draw storage draw = drawIdToDraw[drawId];
+        uint8[] memory winningTeams = drawIdToWinningTeamIds[drawId];
+        uint256 prize = draw.availableYieldAtEnd - draw.availableYieldAtStart;
+        uint256 winningTeamTotalTwab = 0;
+
+        for (uint256 i = 0; i < winningTeams.length; i++) {
+            uint256 teamTwab = drawIdToWinningTeamTwab[drawId][winningTeams[i]];
+
+            winningTeamTotalTwab += teamTwab;
+        }
+        for (uint256 i = 0; i < winningTeams.length; i++) {
+            uint256 teamTwab = drawIdToWinningTeamTwab[drawId][winningTeams[i]];
+
+            uint256 teamPrize = (prize * teamTwab) / winningTeamTotalTwab;
+            drawIdToWinningTeamPrizes[drawId][winningTeams[i]] = teamPrize;
+        }
+    }
+
+    function getDraw(uint24 drawId) external view returns (Draw memory) {
+        return drawIdToDraw[drawId];
+    }
+
     function _calculateTeamTwabBetween(
         address[] memory teamMembers,
         uint24 drawId
@@ -797,12 +815,6 @@ contract VaultV2 is IERC4626, ERC20Permit, Ownable, IVault {
         }
 
         return teamTwab;
-    }
-
-    function getWinningTeams(
-        uint24 drawId
-    ) external view returns (Team[] memory) {
-        return drawIdToWinningTeams[drawId];
     }
 
     /* ============ State Function ============ */
