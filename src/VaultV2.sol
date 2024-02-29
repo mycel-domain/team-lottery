@@ -31,7 +31,7 @@ contract VaultV2 is IERC4626, ERC20Permit, Ownable, IVault {
     }
     struct Team {
         uint8 teamId;
-        SD59x18 teamOdds; //TODO:
+        uint256 teamPoints;
         SD59x18 teamContributionFraction; //TODO:
         address[] teamMembers;
     }
@@ -652,6 +652,11 @@ contract VaultV2 is IERC4626, ERC20Permit, Ownable, IVault {
                 draw.drawStartTime,
                 draw.drawEndTime
             );
+        SD59x18[] memory odds = _calculateTeamOdds(
+            teams,
+            drawId,
+            vaultTwabTotalSupply
+        );
 
         for (uint256 i = 0; i < teams.length; i++) {
             Team memory team = teams[i];
@@ -675,7 +680,7 @@ contract VaultV2 is IERC4626, ERC20Permit, Ownable, IVault {
                 teamTwab,
                 vaultTwabTotalSupply,
                 team.teamContributionFraction,
-                team.teamOdds
+                odds[i]
             );
 
             if (isWinner) {
@@ -689,6 +694,29 @@ contract VaultV2 is IERC4626, ERC20Permit, Ownable, IVault {
         currentDrawId++;
 
         emit DrawFinalized(drawId, drawIdToWinningTeamIds[drawId]);
+    }
+
+    function _calculateTeamOdds(
+        Team[] memory teams,
+        uint24 drawId,
+        uint256 vaultTwabTotalSupply
+    ) internal view returns (SD59x18[] memory odds) {
+        odds = new SD59x18[](teams.length);
+        SD59x18 convertedTotalSupply = convert(int256(vaultTwabTotalSupply));
+
+        for (uint256 i = 0; i < teams.length; i++) {
+            uint256 teamTwab = _calculateTeamTwabBetween(
+                teams[i].teamMembers,
+                drawId
+            );
+            SD59x18 convertedTeamWab = convert(int256(teamTwab));
+            SD59x18 teamOdds = sd(1e18) -
+                (convertedTeamWab / convertedTotalSupply);
+
+            odds[i] = teamOdds;
+        }
+
+        return odds;
     }
 
     function _finalizeTeamPrize(uint24 drawId) internal {
