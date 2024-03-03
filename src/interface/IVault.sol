@@ -7,7 +7,7 @@ import {IERC4626} from "openzeppelin-contracts/interfaces/IERC4626.sol";
 import {TwabController, SPONSORSHIP_ADDRESS} from "pt-v5-twab-controller/TwabController.sol";
 import {VaultHooks} from "pt-v5-vault/interfaces/IVaultHooks.sol";
 
-interface IVault {
+interface IVault is IERC4626 {
     /* ============ Events ============ */
 
     /**
@@ -289,4 +289,6 @@ interface IVault {
     error InvalidDrawPeriod(uint256 timestamp, uint256 drawPeriod);
 
     error AlreadyFinalized();
+
+    error WinningTeamNotFound();
 }

@@ -31,6 +31,7 @@ contract VaultV2 is IERC4626, ERC20Permit, Ownable, IVault {
     }
     struct Team {
         uint8 teamId;
+        uint256 teamTwab;
         uint256 teamPoints;
         SD59x18 teamContributionFraction; //TODO:
         address[] teamMembers;
@@ -39,8 +40,6 @@ contract VaultV2 is IERC4626, ERC20Permit, Ownable, IVault {
     /* ============ Variables ============ */
 
     Draw[] public draws;
-
-    uint24 public currentDrawId = 1;
 
     /// The maximum amount of shares that can be minted.
     uint256 private constant UINT96_MAX = type(uint96).max;
@@ -60,6 +59,8 @@ contract VaultV2 is IERC4626, ERC20Permit, Ownable, IVault {
     /// @notice The gas to give to each of the before and after prize claim hooks.
     /// This should be enough gas to mint an NFT if needed.
     uint24 private constant HOOK_GAS = 150_000;
+
+    uint24 public currentDrawId = 1;
 
     /// @notice Address of the TwabController used to keep track of balances.
     TwabController private immutable _twabController;
@@ -91,8 +92,6 @@ contract VaultV2 is IERC4626, ERC20Permit, Ownable, IVault {
 
     mapping(uint24 => mapping(uint8 => uint256))
         public drawIdToWinningTeamPrizes;
-
-    mapping(uint24 => mapping(uint8 => uint256)) public drawIdToWinningTeamTwab;
 
     mapping(uint24 => mapping(uint8 => bool))
         public drawIdToWinningTeamIsClaimed;
@@ -630,7 +629,7 @@ contract VaultV2 is IERC4626, ERC20Permit, Ownable, IVault {
     }
 
     function finalizeDraw(
-        bytes memory _data,
+        bytes calldata _data,
         uint24 drawId
     ) external onlyOwner {
         if (block.timestamp < drawIdToDraw[drawId].drawEndTime) {
@@ -643,7 +642,7 @@ contract VaultV2 is IERC4626, ERC20Permit, Ownable, IVault {
             revert AlreadyFinalized();
         }
         Team[] memory teams = abi.decode(_data, (Team[]));
-        Draw storage draw = drawIdToDraw[drawId];
+        Draw memory draw = drawIdToDraw[drawId];
         draw.availableYieldAtEnd = _availableYieldBalance();
 
         uint256 vaultTwabTotalSupply = _twabController
@@ -670,14 +669,9 @@ contract VaultV2 is IERC4626, ERC20Permit, Ownable, IVault {
                     0 //TODO: uint256 _winningRandomNumber
                 );
 
-            uint256 teamTwab = _calculateTeamTwabBetween(
-                team.teamMembers,
-                drawId
-            );
-
-            (bool isWinner, , ) = DrawCalculation.isWinner(
+            bool isWinner = DrawCalculation.isWinner(
                 teamSpecificRandomNumber,
-                teamTwab,
+                team.teamTwab,
                 vaultTwabTotalSupply,
                 team.teamContributionFraction,
                 odds[i]
@@ -685,10 +679,14 @@ contract VaultV2 is IERC4626, ERC20Permit, Ownable, IVault {
 
             if (isWinner) {
                 drawIdToWinningTeamIds[drawId].push(team.teamId);
-                drawIdToWinningTeamTwab[drawId][team.teamId] = teamTwab;
                 drawIdToWinningTeams[drawId].push(team);
             }
         }
+
+        if (drawIdToWinningTeamIds[drawId].length == 0) {
+            revert WinningTeamNotFound();
+        }
+
         _finalizeTeamPrize(drawId);
         draw.isFinalized = true;
         currentDrawId++;
@@ -697,7 +695,7 @@ contract VaultV2 is IERC4626, ERC20Permit, Ownable, IVault {
     }
 
     function distributePrizes(uint24 drawId) external onlyOwner {
-        uint8[] memory winningTeams = drawIdToWinningTeamIds[drawId];
+        Team[] memory winningTeams = drawIdToWinningTeams[drawId];
 
         // withdraw prize from yield vault to this contract
         _yieldVault.withdraw(
@@ -705,37 +703,49 @@ contract VaultV2 is IERC4626, ERC20Permit, Ownable, IVault {
             address(this),
             address(this)
         );
+        // distribute prize to winners
         for (uint256 i = 0; i < winningTeams.length; i++) {
+            // get team prize size from mapping
             uint256 teamPrize = drawIdToWinningTeamPrizes[drawId][
-                winningTeams[i]
+                winningTeams[i].teamId
             ];
 
-            address[] memory teamMembers = drawIdToWinningTeams[drawId][i]
-                .teamMembers;
-            uint256 totalTeamTwab = drawIdToWinningTeamTwab[drawId][
-                winningTeams[i]
-            ];
+            address[] memory teamMembers = winningTeams[i].teamMembers;
+            uint256 teamTwab = winningTeams[i].teamTwab;
 
-            for (uint256 j = 0; j < teamMembers.length; j++) {
+            // calculate member's prize size and transfer the prize to member
+            uint256 teamMembersLength = teamMembers.length;
+            for (uint256 j = 0; j < teamMembersLength; j++) {
                 uint256 memberTwab = _twabController.getTwabBetween(
                     address(this),
                     teamMembers[j],
                     drawIdToDraw[drawId].drawStartTime,
                     drawIdToDraw[drawId].drawEndTime
                 );
-                uint256 memberPrize = (teamPrize * memberTwab) / totalTeamTwab;
+                uint256 memberPrize = (teamPrize * memberTwab) / teamTwab;
+
+                // TODD: check if the member already claimed the prize by using bitmap
 
                 _asset.safeTransfer(teamMembers[j], memberPrize);
                 emit PrizeDistributed(
                     drawId,
-                    winningTeams[i],
+                    winningTeams[i].teamId,
                     teamMembers[j],
                     memberPrize
                 );
             }
 
-            drawIdToWinningTeamIsClaimed[drawId][winningTeams[i]] = true;
+            drawIdToWinningTeamIsClaimed[drawId][winningTeams[i].teamId] = true;
         }
+    }
+
+    function _winningTwabTotal(uint24 drawId) internal view returns (uint256) {
+        uint256 totalTwab;
+        Team[] memory winningTeams = drawIdToWinningTeams[drawId];
+        for (uint256 i = 0; i < winningTeams.length; i++) {
+            totalTwab += winningTeams[i].teamTwab;
+        }
+        return totalTwab;
     }
 
     function calculateTeamOdds(
@@ -776,26 +786,31 @@ contract VaultV2 is IERC4626, ERC20Permit, Ownable, IVault {
     }
 
     function _finalizeTeamPrize(uint24 drawId) internal {
-        Draw storage draw = drawIdToDraw[drawId];
-        uint8[] memory winningTeams = drawIdToWinningTeamIds[drawId];
+        Draw memory draw = drawIdToDraw[drawId];
+        Team[] memory winningTeams = drawIdToWinningTeams[drawId];
         uint256 prize = draw.availableYieldAtEnd - draw.availableYieldAtStart;
-        uint256 winningTeamTotalTwab = 0;
+
+        uint256 winningTeamTotalTwab = _winningTwabTotal(drawId);
 
         for (uint256 i = 0; i < winningTeams.length; i++) {
-            uint256 teamTwab = drawIdToWinningTeamTwab[drawId][winningTeams[i]];
-
-            winningTeamTotalTwab += teamTwab;
-        }
-        for (uint256 i = 0; i < winningTeams.length; i++) {
-            uint256 teamTwab = drawIdToWinningTeamTwab[drawId][winningTeams[i]];
+            uint256 teamTwab = winningTeams[i].teamTwab;
 
             uint256 teamPrize = (prize * teamTwab) / winningTeamTotalTwab;
-            drawIdToWinningTeamPrizes[drawId][winningTeams[i]] = teamPrize;
+            drawIdToWinningTeamPrizes[drawId][
+                winningTeams[i].teamId
+            ] = teamPrize;
         }
     }
 
     function getDraw(uint24 drawId) external view returns (Draw memory) {
         return drawIdToDraw[drawId];
+    }
+
+    function calculateTeamTwabBetween(
+        address[] memory teamMembers,
+        uint24 drawId
+    ) external view returns (uint256) {
+        return _calculateTeamTwabBetween(teamMembers, drawId);
     }
 
     function _calculateTeamTwabBetween(
@@ -804,7 +819,7 @@ contract VaultV2 is IERC4626, ERC20Permit, Ownable, IVault {
     ) internal view returns (uint256) {
         uint256 teamTwab = 0;
 
-        Draw storage draw = drawIdToDraw[drawId];
+        Draw memory draw = drawIdToDraw[drawId];
         for (uint256 i = 0; i < teamMembers.length; i++) {
             teamTwab += _twabController.getTwabBetween(
                 address(this),
