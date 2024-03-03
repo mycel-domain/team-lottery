@@ -2,6 +2,7 @@
 pragma solidity ^0.8.20;
 
 import {ERC20, IERC20, IERC20Metadata} from "openzeppelin-contracts/token/ERC20/ERC20.sol";
+import {MerkleProof} from "openzeppelin-contracts/utils/cryptography/MerkleProof.sol";
 import {IERC4626} from "openzeppelin-contracts/interfaces/IERC4626.sol";
 import {ERC20Permit, IERC20Permit} from "openzeppelin-contracts/token/ERC20/extensions/ERC20Permit.sol";
 import {SafeERC20} from "openzeppelin-contracts/token/ERC20/utils/SafeERC20.sol";
@@ -29,12 +30,20 @@ contract VaultV2 is IERC4626, ERC20Permit, Ownable, IVault {
         uint256 availableYieldAtEnd;
         bool isFinalized;
     }
+
     struct Team {
         uint8 teamId;
         uint256 teamTwab;
         uint256 teamPoints;
         SD59x18 teamContributionFraction; //TODO:
         address[] teamMembers;
+    }
+
+    struct Distribution {
+        address recipient;
+        uint256 index;
+        uint256 amount;
+        bytes32[] merkleProof;
     }
 
     /* ============ Variables ============ */
@@ -91,13 +100,13 @@ contract VaultV2 is IERC4626, ERC20Permit, Ownable, IVault {
     mapping(uint24 => Team[]) public drawIdToWinningTeams;
 
     mapping(uint24 => mapping(uint8 => uint256))
-        public drawIdToWinningTeamPrizes;
-
-    mapping(uint24 => mapping(uint8 => bool))
-        public drawIdToWinningTeamIsClaimed;
+        private drawIdToWinningTeamPrizes;
+    mapping(uint24 => uint256) public drawIdToPrize;
 
     mapping(uint24 => Draw) public drawIdToDraw;
 
+    // mapping drawId to merkle root
+    mapping(uint24 => bytes32) public drawIdToMerkleRoot;
     /* ============ Modifiers ============ */
 
     /// @notice Modifier reverting if the Vault is under-collateralized.
@@ -115,16 +124,18 @@ contract VaultV2 is IERC4626, ERC20Permit, Ownable, IVault {
         uint256 _depositedAssets,
         uint256 _withdrawableAssets
     ) internal pure {
-        if (!_isVaultCollateralized(_depositedAssets, _withdrawableAssets))
+        if (!_isVaultCollateralized(_depositedAssets, _withdrawableAssets)) {
             revert VaultUndercollateralized();
+        }
     }
 
     /**
      * @notice Requires the caller to be the claimer.
      */
     modifier onlyClaimer() {
-        if (msg.sender != _claimer)
+        if (msg.sender != _claimer) {
             revert CallerNotClaimer(msg.sender, _claimer);
+        }
         _;
     }
 
@@ -514,8 +525,9 @@ contract VaultV2 is IERC4626, ERC20Permit, Ownable, IVault {
             _vaultCollateralized
         );
 
-        if (_withdrawnAssets < _assets)
+        if (_withdrawnAssets < _assets) {
             revert WithdrawAssetsLTRequested(_assets, _withdrawnAssets);
+        }
 
         return _shares;
     }
@@ -526,8 +538,9 @@ contract VaultV2 is IERC4626, ERC20Permit, Ownable, IVault {
         address _receiver,
         address _owner
     ) external virtual override returns (uint256) {
-        if (_shares > _maxRedeem(_owner))
+        if (_shares > _maxRedeem(_owner)) {
             revert RedeemMoreThanMax(_owner, _shares, _maxRedeem(_owner));
+        }
 
         uint256 _depositedAssets = _totalSupply();
         uint256 _withdrawableAssets = _totalAssets();
@@ -594,10 +607,12 @@ contract VaultV2 is IERC4626, ERC20Permit, Ownable, IVault {
 
         uint256 _availableYield = _withdrawableAssets - _depositedAssets;
 
-        if (_shares > _availableYield)
+        if (_shares > _availableYield) {
             revert YieldFeeGTAvailableYield(_shares, _availableYield);
-        if (_shares > _yieldFeeShares)
+        }
+        if (_shares > _yieldFeeShares) {
             revert YieldFeeGTAvailableShares(_shares, _yieldFeeShares);
+        }
 
         address yieldFeeRecipient_ = _yieldFeeRecipient;
         _yieldFeeShares -= _shares;
@@ -629,8 +644,8 @@ contract VaultV2 is IERC4626, ERC20Permit, Ownable, IVault {
     }
 
     function finalizeDraw(
-        bytes calldata _data,
-        uint24 drawId
+        uint24 drawId,
+        bytes calldata _data
     ) external onlyOwner {
         if (block.timestamp < drawIdToDraw[drawId].drawEndTime) {
             revert InvalidDrawPeriod(
@@ -642,7 +657,7 @@ contract VaultV2 is IERC4626, ERC20Permit, Ownable, IVault {
             revert AlreadyFinalized();
         }
         Team[] memory teams = abi.decode(_data, (Team[]));
-        Draw memory draw = drawIdToDraw[drawId];
+        Draw storage draw = drawIdToDraw[drawId];
         draw.availableYieldAtEnd = _availableYieldBalance();
 
         uint256 vaultTwabTotalSupply = _twabController
@@ -657,6 +672,7 @@ contract VaultV2 is IERC4626, ERC20Permit, Ownable, IVault {
             vaultTwabTotalSupply
         );
 
+        // check if the team is winner
         for (uint256 i = 0; i < teams.length; i++) {
             Team memory team = teams[i];
 
@@ -691,56 +707,155 @@ contract VaultV2 is IERC4626, ERC20Permit, Ownable, IVault {
         draw.isFinalized = true;
         currentDrawId++;
 
+        drawIdToPrize[drawId] =
+            _availableYieldBalance() -
+            draw.availableYieldAtStart;
+
         emit DrawFinalized(drawId, drawIdToWinningTeamIds[drawId]);
     }
 
-    function distributePrizes(uint24 drawId) external onlyOwner {
-        Team[] memory winningTeams = drawIdToWinningTeams[drawId];
+    // _data: Distribution[] -> (address recipient, uint256 index, uint256 amount, bytes32[] merkleProof)
+    // finalizeDraw -> getDistributions -> setDistribution -> distributePrizes
+    // Owner must call setDistribution before calling distributePrizes
+    // because distributionPrize check whether the recipient and amount is valid or not based on the merkle proof
+    function distributePrizes(
+        uint24 drawId,
+        bytes memory _data
+    ) external onlyOwner {
+        if (!_isDistributionSet(drawId)) {
+            revert DistributionNotSet(drawId);
+        }
 
-        // withdraw prize from yield vault to this contract
-        _yieldVault.withdraw(
-            drawIdToDraw[drawId].availableYieldAtEnd,
-            address(this),
-            address(this)
+        uint256 prize = drawIdToPrize[drawId];
+        if (_yieldVault.maxWithdraw(address(this)) < prize) {
+            revert InvalidAmount();
+        }
+
+        // only withdraw yield
+        _yieldVault.withdraw(prize, address(this), address(this));
+
+        Distribution[] memory distributions = abi.decode(
+            _data,
+            (Distribution[])
         );
-        // distribute prize to winners
-        for (uint256 i = 0; i < winningTeams.length; i++) {
-            // get team prize size from mapping
-            uint256 teamPrize = drawIdToWinningTeamPrizes[drawId][
-                winningTeams[i].teamId
-            ];
 
-            address[] memory teamMembers = winningTeams[i].teamMembers;
-            uint256 teamTwab = winningTeams[i].teamTwab;
+        for (uint256 i = 0; i < distributions.length; i++) {
+            Distribution memory distribution = distributions[i];
 
-            // calculate member's prize size and transfer the prize to member
-            uint256 teamMembersLength = teamMembers.length;
-            for (uint256 j = 0; j < teamMembersLength; j++) {
-                uint256 memberTwab = _twabController.getTwabBetween(
-                    address(this),
-                    teamMembers[j],
-                    drawIdToDraw[drawId].drawStartTime,
-                    drawIdToDraw[drawId].drawEndTime
-                );
-                uint256 memberPrize = (teamPrize * memberTwab) / teamTwab;
+            uint256 index = distribution.index;
+            address recipient = distribution.recipient;
+            uint256 amount = distribution.amount;
+            bytes32[] memory merkleProof = distribution.merkleProof;
 
-                // TODD: check if the member already claimed the prize by using bitmap
-
-                _asset.safeTransfer(teamMembers[j], memberPrize);
-                emit PrizeDistributed(
+            // Validate the distribution and transfer the funds to the recipient, otherwise revert if not valid
+            if (
+                _validateDistribution(
                     drawId,
-                    winningTeams[i].teamId,
-                    teamMembers[j],
-                    memberPrize
+                    index,
+                    recipient,
+                    amount,
+                    merkleProof
+                )
+            ) {
+                // TODO: call setDistribute function that tracks whether the distribution has done or not for each recipient
+                // Transfer the amount to the recipient
+                _asset.safeTransfer(
+                    distribution.recipient,
+                    distribution.amount
                 );
+                // Emit that the prize have been distributed to the recipient
+                emit PrizeDistributed(drawId, recipient, amount);
+            } else {
+                revert InvalidRecipient(distribution.recipient);
             }
-
-            drawIdToWinningTeamIsClaimed[drawId][winningTeams[i].teamId] = true;
         }
     }
 
-    function _winningTwabTotal(uint24 drawId) internal view returns (uint256) {
-        uint256 totalTwab;
+    function setDistribution(
+        uint24 drawId,
+        bytes32 merkleRoot
+    ) external onlyOwner {
+        drawIdToMerkleRoot[drawId] = merkleRoot;
+        emit DistributionSet(drawId, merkleRoot);
+    }
+
+    function _isDistributionSet(uint24 drawId) internal view returns (bool) {
+        return drawIdToMerkleRoot[drawId] != 0;
+    }
+
+    // getDistributions for each winning team
+    function getDistributions(
+        uint24 drawId
+    ) external view returns (address[] memory, uint256[] memory) {
+        Team[] memory winningTeams = drawIdToWinningTeams[drawId];
+        Draw memory draw = drawIdToDraw[drawId];
+
+        uint256 totalMembers;
+        for (uint256 i = 0; i < winningTeams.length; i++) {
+            totalMembers += winningTeams[i].teamMembers.length;
+        }
+
+        address[] memory recipients = new address[](totalMembers);
+        uint256[] memory amounts = new uint256[](totalMembers);
+
+        uint256 counter;
+        for (uint256 i = 0; i < winningTeams.length; i++) {
+            Team memory team = winningTeams[i];
+            uint256 teamPrize = drawIdToWinningTeamPrizes[drawId][team.teamId];
+
+            for (uint256 j = 0; j < team.teamMembers.length; j++) {
+                address recipient = team.teamMembers[j];
+                uint256 userTwab = _twabController.getTwabBetween(
+                    address(this),
+                    recipient,
+                    draw.drawStartTime,
+                    draw.drawEndTime
+                );
+
+                uint256 memberPrize = Math.mulDiv(
+                    teamPrize,
+                    userTwab,
+                    team.teamTwab
+                );
+
+                recipients[counter] = recipient;
+                amounts[counter] = memberPrize;
+                counter++;
+            }
+        }
+
+        return (recipients, amounts);
+    }
+
+    function _validateDistribution(
+        uint24 drawId,
+        uint256 index,
+        address recipient,
+        uint256 amount,
+        bytes32[] memory merkleProof
+    ) internal view returns (bool) {
+        // TODO: check if the distribution has been done or not
+
+        bytes32 node = keccak256(
+            bytes.concat(keccak256(abi.encode(index, recipient, amount)))
+        );
+
+        // Generate the node that will be verified in the 'merkleRoot'
+        bytes32 merkleRoot = drawIdToMerkleRoot[drawId];
+
+        // If the node is not verified in the 'merkleRoot' this will return 'false'
+        if (!MerkleProof.verify(merkleProof, merkleRoot, node)) {
+            return false;
+        }
+
+        // Return 'true', the distribution is valid at this point
+        return true;
+    }
+
+    // calculate total twab of winning teams
+    function _winningTwabTotal(
+        uint24 drawId
+    ) internal view returns (uint256 totalTwab) {
         Team[] memory winningTeams = drawIdToWinningTeams[drawId];
         for (uint256 i = 0; i < winningTeams.length; i++) {
             totalTwab += winningTeams[i].teamTwab;
@@ -762,6 +877,7 @@ contract VaultV2 is IERC4626, ERC20Permit, Ownable, IVault {
         return drawIdToWinningTeams[drawId];
     }
 
+    // calculate team odds corresponding to each team
     function _calculateTeamOdds(
         Team[] memory teams,
         uint24 drawId,
@@ -795,7 +911,11 @@ contract VaultV2 is IERC4626, ERC20Permit, Ownable, IVault {
         for (uint256 i = 0; i < winningTeams.length; i++) {
             uint256 teamTwab = winningTeams[i].teamTwab;
 
-            uint256 teamPrize = (prize * teamTwab) / winningTeamTotalTwab;
+            uint256 teamPrize = Math.mulDiv(
+                prize,
+                teamTwab,
+                winningTeamTotalTwab
+            );
             drawIdToWinningTeamPrizes[drawId][
                 winningTeams[i].teamId
             ] = teamPrize;
@@ -816,16 +936,18 @@ contract VaultV2 is IERC4626, ERC20Permit, Ownable, IVault {
     function _calculateTeamTwabBetween(
         address[] memory teamMembers,
         uint24 drawId
-    ) internal view returns (uint256) {
-        uint256 teamTwab = 0;
-
+    ) internal view returns (uint256 teamTwab) {
         Draw memory draw = drawIdToDraw[drawId];
+
+        uint256 drawStartTime = draw.drawStartTime;
+        uint256 drawEndTime = draw.drawEndTime;
+
         for (uint256 i = 0; i < teamMembers.length; i++) {
             teamTwab += _twabController.getTwabBetween(
                 address(this),
                 teamMembers[i],
-                draw.drawStartTime,
-                draw.drawEndTime
+                drawStartTime,
+                drawEndTime
             );
         }
 
@@ -916,7 +1038,6 @@ contract VaultV2 is IERC4626, ERC20Permit, Ownable, IVault {
      * @notice Address of the yield fee recipient.
      * @return address Yield fee recipient address
      */
-
     function yieldFeeRecipient() external view returns (address) {
         return _yieldFeeRecipient;
     }
@@ -925,7 +1046,6 @@ contract VaultV2 is IERC4626, ERC20Permit, Ownable, IVault {
      * @notice Yield fee percentage.
      * @return uint256 Yield fee percentage
      */
-
     function yieldFeePercentage() external view returns (uint256) {
         return _yieldFeePercentage;
     }
@@ -1213,8 +1333,9 @@ contract VaultV2 is IERC4626, ERC20Permit, Ownable, IVault {
     function _liquidatableBalanceOf(
         address _token
     ) internal view returns (uint256) {
-        if (_token != address(this))
+        if (_token != address(this)) {
             revert LiquidationTokenOutNotVaultShare(_token, address(this));
+        }
 
         uint256 _availableYield = _availableYieldBalance();
 

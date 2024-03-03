@@ -5,13 +5,7 @@ erc4626-tests/=lib/openzeppelin-contracts-upgradeable/lib/erc4626-tests/
 forge-std/=lib/forge-std/src/
 openzeppelin-contracts-upgradeable/=lib/openzeppelin-contracts-upgradeable/contracts
 openzeppelin-contracts/=lib/openzeppelin-contracts/contracts
-@aave/core-v3/=lib/aave-v3-core/contracts
-aave-v3-core/=lib/aave-v3-core/contracts
-aave-v3-periphery/=lib/aave-v3-periphery/contracts
-@aave/periphery-v3/=lib/aave-v3-periphery/contracts
 pooltogether/owner-manager-contracts/=lib/owner-manager-contracts/
 pt-v5-vault/=lib/pt-v5-vault/src/
 pt-v5-twab-controller/=lib/pt-v5-twab-controller/src/
-aave-address-book/=lib/aave-address-book/src/
-
 yield-daddy/=lib/yield-daddy/src/

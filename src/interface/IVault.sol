@@ -47,11 +47,7 @@ interface IVault is IERC4626 {
      * @param recipient Address receiving the Vault shares
      * @param shares Amount of shares minted to `recipient`
      */
-    event MintYieldFee(
-        address indexed caller,
-        address indexed recipient,
-        uint256 shares
-    );
+    event MintYieldFee(address indexed caller, address indexed recipient, uint256 shares);
 
     /**
      * @notice Emitted when a new yield fee recipient has been set.
@@ -83,18 +79,14 @@ interface IVault is IERC4626 {
     /**
      * @notice Emitted when a user sweeps assets held by the Vault into the YieldVault.
      * @param drawId The draw id
-     * @param teamId The team id
      * @param recipient The recipient of the prize
      * @param amount The amount of the prize
      */
-    event PrizeDistributed(
-        uint24 indexed drawId,
-        uint8 indexed teamId,
-        address recipient,
-        uint256 amount
-    );
+    event PrizeDistributed(uint24 indexed drawId, address recipient, uint256 amount);
 
     event DrawFinalized(uint24 indexed drawId, uint8[] winningTeams);
+
+		event DistributionSet(uint24 indexed drawId, bytes32 merkleRoot);
 
     /* ============ Errors ============ */
 
@@ -158,10 +150,7 @@ interface IVault is IERC4626 {
      * @param requestedAssets The amount of assets requested
      * @param withdrawnAssets The amount of assets withdrawn from the YieldVault
      */
-    error WithdrawAssetsLTRequested(
-        uint256 requestedAssets,
-        uint256 withdrawnAssets
-    );
+    error WithdrawAssetsLTRequested(uint256 requestedAssets, uint256 withdrawnAssets);
 
     /// @notice Emitted when `sweep` is called but no underlying assets are currently held by the Vault.
     error SweepZeroAssets();
@@ -185,10 +174,7 @@ interface IVault is IERC4626 {
      * @param tokenOut The provided tokenOut address
      * @param vaultShare The vault share token address
      */
-    error LiquidationTokenOutNotVaultShare(
-        address tokenOut,
-        address vaultShare
-    );
+    error LiquidationTokenOutNotVaultShare(address tokenOut, address vaultShare);
 
     /// @notice Emitted during the liquidation process when the liquidation amount out is zero.
     error LiquidationAmountOutZero();
@@ -198,10 +184,7 @@ interface IVault is IERC4626 {
      * @param amountOut The amount out
      * @param availableYield The available yield
      */
-    error LiquidationAmountOutGTYield(
-        uint256 amountOut,
-        uint256 availableYield
-    );
+    error LiquidationAmountOutGTYield(uint256 amountOut, uint256 availableYield);
 
     /// @notice Emitted when the Vault is under-collateralized.
     error VaultUndercollateralized();
@@ -244,10 +227,7 @@ interface IVault is IERC4626 {
      * @param yieldFeePercentage The yield fee percentage in integer format
      * @param maxYieldFeePercentage The max yield fee percentage in integer format (this value is equal to 1 in decimal format)
      */
-    error YieldFeePercentageGtePrecision(
-        uint256 yieldFeePercentage,
-        uint256 maxYieldFeePercentage
-    );
+    error YieldFeePercentageGtePrecision(uint256 yieldFeePercentage, uint256 maxYieldFeePercentage);
 
     /**
      * @notice Emitted when the BeforeClaim prize hook fails
@@ -279,16 +259,17 @@ interface IVault is IERC4626 {
      * @param amount The amount of assets permitted
      * @param allowance The allowance after the permit was called
      */
-    error PermitAllowanceNotSet(
-        address owner,
-        address spender,
-        uint256 amount,
-        uint256 allowance
-    );
+    error PermitAllowanceNotSet(address owner, address spender, uint256 amount, uint256 allowance);
 
     error InvalidDrawPeriod(uint256 timestamp, uint256 drawPeriod);
 
     error AlreadyFinalized();
 
     error WinningTeamNotFound();
+
+    error InvalidRecipient(address recipient);
+
+    error InvalidAmount();
+
+		error DistributionNotSet(uint24 drawId);
 }
