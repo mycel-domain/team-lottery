@@ -23,15 +23,14 @@ contract WETH is IWETH {
     string public constant override symbol = "WETH";
     uint8 public override decimals = 18;
 
-    mapping(address => uint) public override balanceOf;
-    mapping(address => mapping(address => uint)) public override allowance;
+    mapping(address => uint256) public override balanceOf;
+    mapping(address => mapping(address => uint256)) public override allowance;
 
-    bytes32 private constant PERMIT_TYPEHASH =
-        0x6e71edae12b1b97f4d1f60370fef10105fa2faae0126114a169c64845d6126c9; // keccak256("Permit(address owner,address spender,uint256 value,uint256 nonce,uint256 deadline)");
+    bytes32 private constant PERMIT_TYPEHASH = 0x6e71edae12b1b97f4d1f60370fef10105fa2faae0126114a169c64845d6126c9; // keccak256("Permit(address owner,address spender,uint256 value,uint256 nonce,uint256 deadline)");
     bytes4 private constant MAGICVALUE = 0x1626ba7e; // bytes4(keccak256("isValidSignature(bytes32,bytes)")
-    mapping(address => uint) public override nonces;
+    mapping(address => uint256) public override nonces;
 
-    uint private immutable INITIAL_CHAIN_ID;
+    uint256 private immutable INITIAL_CHAIN_ID;
     bytes32 private immutable INITIAL_DOMAIN_SEPARATOR;
 
     constructor() {
@@ -43,36 +42,29 @@ contract WETH is IWETH {
         deposit();
     }
 
-    function supportsInterface(
-        bytes4 interfaceID
-    ) external pure override returns (bool) {
-        return
-            interfaceID == this.supportsInterface.selector || // ERC-165
-            interfaceID == this.permit.selector || // ERC-2612
-            interfaceID == this.permit2.selector; // Permit2
+    function supportsInterface(bytes4 interfaceID) external pure override returns (bool) {
+        return interfaceID == this.supportsInterface.selector // ERC-165
+            || interfaceID == this.permit.selector // ERC-2612
+            || interfaceID == this.permit2.selector; // Permit2
     }
 
     function DOMAIN_SEPARATOR() public view override returns (bytes32) {
-        return
-            block.chainid == INITIAL_CHAIN_ID
-                ? INITIAL_DOMAIN_SEPARATOR
-                : _computeDomainSeparator();
+        return block.chainid == INITIAL_CHAIN_ID ? INITIAL_DOMAIN_SEPARATOR : _computeDomainSeparator();
     }
 
     function _computeDomainSeparator() private view returns (bytes32) {
-        return
-            keccak256(
-                abi.encode(
-                    // keccak256("EIP712Domain(string name,string version,uint256 chainId,address verifyingContract)")
-                    0x8b73c3c69bb8fe3d512ecc4cf759cc79239f7b179b0ffacaa9a75d522b39400f,
-                    // keccak256(bytes('Wrapped Ether')),
-                    0x00cd3d46df44f2cbb950cf84eb2e92aa2ddd23195b1a009173ea59a063357ed3,
-                    // keccak256(bytes("1"))
-                    0xc89efdaa54c0f20c7adf612882df0950f5a951637e0307cdcb4c672f298b8bc6,
-                    block.chainid,
-                    address(this)
-                )
-            );
+        return keccak256(
+            abi.encode(
+                // keccak256("EIP712Domain(string name,string version,uint256 chainId,address verifyingContract)")
+                0x8b73c3c69bb8fe3d512ecc4cf759cc79239f7b179b0ffacaa9a75d522b39400f,
+                // keccak256(bytes('Wrapped Ether')),
+                0x00cd3d46df44f2cbb950cf84eb2e92aa2ddd23195b1a009173ea59a063357ed3,
+                // keccak256(bytes("1"))
+                0xc89efdaa54c0f20c7adf612882df0950f5a951637e0307cdcb4c672f298b8bc6,
+                block.chainid,
+                address(this)
+            )
+        );
     }
 
     function deposit() public payable {
@@ -80,23 +72,20 @@ contract WETH is IWETH {
         emit Deposit(msg.sender, msg.value);
     }
 
-    function withdraw(uint value) external override {
+    function withdraw(uint256 value) external override {
         balanceOf[msg.sender] -= value;
-        (bool success, ) = msg.sender.call{value: value}("");
+        (bool success,) = msg.sender.call{value: value}("");
         if (!success) {
             revert WETH_ETHTransferFailed();
         }
         emit Withdrawal(msg.sender, value);
     }
 
-    function totalSupply() external view override returns (uint) {
+    function totalSupply() external view override returns (uint256) {
         return address(this).balance;
     }
 
-    function approve(
-        address spender,
-        uint value
-    ) external override returns (bool) {
+    function approve(address spender, uint256 value) external override returns (bool) {
         allowance[msg.sender][spender] = value;
         emit Approval(msg.sender, spender, value);
         return true;
@@ -113,10 +102,7 @@ contract WETH is IWETH {
         _;
     }
 
-    function transfer(
-        address to,
-        uint value
-    ) external override ensuresRecipient(to) returns (bool) {
+    function transfer(address to, uint256 value) external override ensuresRecipient(to) returns (bool) {
         balanceOf[msg.sender] -= value;
         balanceOf[to] += value;
 
@@ -124,14 +110,15 @@ contract WETH is IWETH {
         return true;
     }
 
-    function transferFrom(
-        address from,
-        address to,
-        uint value
-    ) external override ensuresRecipient(to) returns (bool) {
+    function transferFrom(address from, address to, uint256 value)
+        external
+        override
+        ensuresRecipient(to)
+        returns (bool)
+    {
         if (from != msg.sender) {
-            uint _allowance = allowance[from][msg.sender];
-            if (_allowance != type(uint).max) {
+            uint256 _allowance = allowance[from][msg.sender];
+            if (_allowance != type(uint256).max) {
                 allowance[from][msg.sender] -= value;
             }
         }
@@ -143,15 +130,10 @@ contract WETH is IWETH {
         return true;
     }
 
-    function permit(
-        address owner,
-        address spender,
-        uint value,
-        uint deadline,
-        uint8 v,
-        bytes32 r,
-        bytes32 s
-    ) external override {
+    function permit(address owner, address spender, uint256 value, uint256 deadline, uint8 v, bytes32 r, bytes32 s)
+        external
+        override
+    {
         if (block.timestamp > deadline) {
             revert WETH_ExpiredSignature();
         }
@@ -159,16 +141,7 @@ contract WETH is IWETH {
             abi.encodePacked(
                 "\x19\x01",
                 DOMAIN_SEPARATOR(),
-                keccak256(
-                    abi.encode(
-                        PERMIT_TYPEHASH,
-                        owner,
-                        spender,
-                        value,
-                        nonces[owner]++,
-                        deadline
-                    )
-                )
+                keccak256(abi.encode(PERMIT_TYPEHASH, owner, spender, value, nonces[owner]++, deadline))
             )
         );
         address recoveredAddress = ecrecover(digest, v, r, s);
@@ -182,13 +155,10 @@ contract WETH is IWETH {
         emit Approval(owner, spender, value);
     }
 
-    function permit2(
-        address owner,
-        address spender,
-        uint value,
-        uint deadline,
-        bytes calldata signature
-    ) external override {
+    function permit2(address owner, address spender, uint256 value, uint256 deadline, bytes calldata signature)
+        external
+        override
+    {
         if (block.timestamp > deadline) {
             revert WETH_ExpiredSignature();
         }
@@ -196,16 +166,7 @@ contract WETH is IWETH {
             abi.encodePacked(
                 "\x19\x01",
                 DOMAIN_SEPARATOR(),
-                keccak256(
-                    abi.encode(
-                        PERMIT_TYPEHASH,
-                        owner,
-                        spender,
-                        value,
-                        nonces[owner]++,
-                        deadline
-                    )
-                )
+                keccak256(abi.encode(PERMIT_TYPEHASH, owner, spender, value, nonces[owner]++, deadline))
             )
         );
         if (!_checkSignature(owner, digest, signature)) {
@@ -215,11 +176,7 @@ contract WETH is IWETH {
         emit Approval(owner, spender, value);
     }
 
-    function _checkSignature(
-        address signer,
-        bytes32 hash,
-        bytes memory signature
-    ) private view returns (bool) {
+    function _checkSignature(address signer, bytes32 hash, bytes memory signature) private view returns (bool) {
         address recoveredAddress = _recover(hash, signature);
         if (recoveredAddress == signer) {
             if (recoveredAddress != address(0)) {
@@ -227,18 +184,11 @@ contract WETH is IWETH {
             }
         }
 
-        (bool success, bytes memory result) = signer.staticcall(
-            abi.encodeWithSelector(MAGICVALUE, hash, signature)
-        );
-        return (success &&
-            result.length == 32 &&
-            abi.decode(result, (bytes32)) == bytes32(MAGICVALUE));
+        (bool success, bytes memory result) = signer.staticcall(abi.encodeWithSelector(MAGICVALUE, hash, signature));
+        return (success && result.length == 32 && abi.decode(result, (bytes32)) == bytes32(MAGICVALUE));
     }
 
-    function _recover(
-        bytes32 hash,
-        bytes memory signature
-    ) private pure returns (address) {
+    function _recover(bytes32 hash, bytes memory signature) private pure returns (address) {
         if (signature.length != 65) {
             return address(0);
         }
@@ -253,10 +203,7 @@ contract WETH is IWETH {
             v := byte(0, mload(add(signature, 0x60)))
         }
 
-        if (
-            uint(s) >
-            0x7FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF5D576E7357A4501DDFE92F46681B20A0
-        ) {
+        if (uint256(s) > 0x7FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF5D576E7357A4501DDFE92F46681B20A0) {
             return address(0);
         }
 

@@ -11,9 +11,9 @@ library DrawCalculation {
         uint256 _vaultTwabTotalSupply,
         SD59x18 _vaultContributionFraction,
         SD59x18 _teamOdds
-    ) internal pure returns (bool, uint256, uint256) {
+    ) internal pure returns (bool) {
         if (_vaultTwabTotalSupply == 0) {
-            return (false, 0, 0);
+            return (false);
         }
 
         /*
@@ -23,43 +23,20 @@ library DrawCalculation {
         - Odds of the tier occurring
         - Number of prizes
         - Portion of prize that was contributed by the vault
-    */
+        */
 
         return (
-            UniformRandomNumber.uniform(
-                _teamSpecificRandomNumber,
-                _vaultTwabTotalSupply
-            ) <
-                calculateWinningZone(
-                    _teamTwab,
-                    _vaultContributionFraction,
-                    _teamOdds
-                ),
-            UniformRandomNumber.uniform(
-                _teamSpecificRandomNumber,
-                _vaultTwabTotalSupply
-            ),
-            calculateWinningZone(
-                _teamTwab,
-                _vaultContributionFraction,
-                _teamOdds
-            )
+            UniformRandomNumber.uniform(_teamSpecificRandomNumber, _vaultTwabTotalSupply)
+                < calculateWinningZone(_teamTwab, _vaultContributionFraction, _teamOdds)
         );
     }
 
-    function calculateWinningZone(
-        uint256 _teamTwab,
-        SD59x18 _vaultContributionFraction,
-        SD59x18 _teamOdds
-    ) internal pure returns (uint256) {
-        return
-            uint256(
-                convert(
-                    convert(int256(_teamTwab)).mul(_teamOdds).mul(
-                        _vaultContributionFraction
-                    )
-                )
-            );
+    function calculateWinningZone(uint256 _teamTwab, SD59x18 _vaultContributionFraction, SD59x18 _teamOdds)
+        internal
+        pure
+        returns (uint256)
+    {
+        return uint256(convert(convert(int256(_teamTwab)).mul(_teamOdds).mul(_vaultContributionFraction)));
     }
 
     function calculatePseudoRandomNumber(
@@ -69,17 +46,6 @@ library DrawCalculation {
         uint256 _totalAmount,
         uint256 _winningRandomNumber
     ) external pure returns (uint256) {
-        return
-            uint256(
-                keccak256(
-                    abi.encode(
-                        _drawId,
-                        _vault,
-                        _teamId,
-                        _totalAmount,
-                        _winningRandomNumber
-                    )
-                )
-            );
+        return uint256(keccak256(abi.encode(_drawId, _vault, _teamId, _totalAmount, _winningRandomNumber)));
     }
 }

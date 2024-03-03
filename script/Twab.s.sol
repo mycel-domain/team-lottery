@@ -12,10 +12,7 @@ contract DeployTwab is Script {
     function run() external {
         vm.startBroadcast(deployerPrivateKey);
 
-        TwabController twabController = new TwabController(
-            3600,
-            uint32(block.timestamp)
-        );
+        TwabController twabController = new TwabController(3600, uint32(block.timestamp));
         console2.log("TwabController deployed at: ", address(twabController));
     }
 }

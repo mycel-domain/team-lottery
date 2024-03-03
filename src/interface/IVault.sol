@@ -86,7 +86,7 @@ interface IVault is IERC4626 {
 
     event DrawFinalized(uint24 indexed drawId, uint8[] winningTeams);
 
-		event DistributionSet(uint24 indexed drawId, bytes32 merkleRoot);
+    event DistributionSet(uint24 indexed drawId, bytes32 merkleRoot);
 
     /* ============ Errors ============ */
 
@@ -271,5 +271,5 @@ interface IVault is IERC4626 {
 
     error InvalidAmount();
 
-		error DistributionNotSet(uint24 drawId);
+    error DistributionNotSet(uint24 drawId);
 }

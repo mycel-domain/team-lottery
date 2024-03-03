@@ -6,14 +6,12 @@ import {IERC4626} from "openzeppelin-contracts/interfaces/IERC4626.sol";
 import {ERC20, IERC20, IERC20Metadata} from "openzeppelin-contracts/token/ERC20/ERC20.sol";
 import {VaultV2 as Vault} from "./VaultV2.sol";
 import {TwabController} from "pt-v5-twab-controller/TwabController.sol";
-// 
+//
+
 contract VaultFactory {
     Vault[] public allVaults;
 
-    event NewFactoryVault(
-        Vault indexed vault,
-        VaultFactory indexed vaultFactory
-    );
+    event NewFactoryVault(Vault indexed vault, VaultFactory indexed vaultFactory);
 
     /**
      * @notice Mapping to store deployer nonces for CREATE2
@@ -31,11 +29,7 @@ contract VaultFactory {
         uint32 yieldFeePercentage_,
         address owner_
     ) external returns (address) {
-        Vault newVault = new Vault{
-            salt: keccak256(
-                abi.encode(msg.sender, deployerNonces[msg.sender]++)
-            )
-        }(
+        Vault newVault = new Vault{salt: keccak256(abi.encode(msg.sender, deployerNonces[msg.sender]++))}(
             asset_,
             name_,
             symbol_,

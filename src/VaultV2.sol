@@ -99,8 +99,7 @@ contract VaultV2 is IERC4626, ERC20Permit, Ownable, IVault {
 
     mapping(uint24 => Team[]) public drawIdToWinningTeams;
 
-    mapping(uint24 => mapping(uint8 => uint256))
-        private drawIdToWinningTeamPrizes;
+    mapping(uint24 => mapping(uint8 => uint256)) private drawIdToWinningTeamPrizes;
     mapping(uint24 => uint256) public drawIdToPrize;
 
     mapping(uint24 => Draw) public drawIdToDraw;
@@ -120,10 +119,7 @@ contract VaultV2 is IERC4626, ERC20Permit, Ownable, IVault {
      * @param _depositedAssets Assets deposited into the YieldVault
      * @param _withdrawableAssets Assets withdrawable from the YieldVault
      */
-    function _onlyVaultCollateralized(
-        uint256 _depositedAssets,
-        uint256 _withdrawableAssets
-    ) internal pure {
+    function _onlyVaultCollateralized(uint256 _depositedAssets, uint256 _withdrawableAssets) internal pure {
         if (!_isVaultCollateralized(_depositedAssets, _withdrawableAssets)) {
             revert VaultUndercollateralized();
         }
@@ -180,10 +176,7 @@ contract VaultV2 is IERC4626, ERC20Permit, Ownable, IVault {
         if (owner_ == address(0)) revert OwnerZeroAddress();
 
         if (address(asset_) != yieldVault_.asset()) {
-            revert UnderlyingAssetMismatch(
-                address(asset_),
-                yieldVault_.asset()
-            );
+            revert UnderlyingAssetMismatch(address(asset_), yieldVault_.asset());
         }
 
         _setClaimer(claimer_);
@@ -228,20 +221,12 @@ contract VaultV2 is IERC4626, ERC20Permit, Ownable, IVault {
     }
 
     /// @inheritdoc ERC20
-    function balanceOf(
-        address _account
-    ) public view virtual override(ERC20, IERC20) returns (uint256) {
+    function balanceOf(address _account) public view virtual override(ERC20, IERC20) returns (uint256) {
         return _balanceOf(_account);
     }
 
     /// @inheritdoc IERC20Metadata
-    function decimals()
-        public
-        view
-        virtual
-        override(ERC20, IERC20Metadata)
-        returns (uint8)
-    {
+    function decimals() public view virtual override(ERC20, IERC20Metadata) returns (uint8) {
         return _underlyingDecimals;
     }
 
@@ -251,130 +236,64 @@ contract VaultV2 is IERC4626, ERC20Permit, Ownable, IVault {
     }
 
     /// @inheritdoc ERC20
-    function totalSupply()
-        public
-        view
-        virtual
-        override(ERC20, IERC20)
-        returns (uint256)
-    {
+    function totalSupply() public view virtual override(ERC20, IERC20) returns (uint256) {
         return _totalSupply();
     }
 
     /* ============ Conversion Functions ============ */
 
     /// @inheritdoc IERC4626
-    function convertToShares(
-        uint256 _assets
-    ) external view virtual override returns (uint256) {
-        return
-            _convertToShares(
-                _assets,
-                _totalSupply(),
-                _totalAssets(),
-                Math.Rounding.Down
-            );
+    function convertToShares(uint256 _assets) external view virtual override returns (uint256) {
+        return _convertToShares(_assets, _totalSupply(), _totalAssets(), Math.Rounding.Down);
     }
 
     /// @inheritdoc IERC4626
-    function convertToAssets(
-        uint256 _shares
-    ) external view virtual override returns (uint256) {
-        return
-            _convertToAssets(
-                _shares,
-                _totalSupply(),
-                _totalAssets(),
-                Math.Rounding.Down
-            );
+    function convertToAssets(uint256 _shares) external view virtual override returns (uint256) {
+        return _convertToAssets(_shares, _totalSupply(), _totalAssets(), Math.Rounding.Down);
     }
 
     /* ============ Max / Preview Functions ============ */
 
     /// @inheritdoc IERC4626
-    function maxDeposit(
-        address
-    ) external view virtual override returns (uint256) {
+    function maxDeposit(address) external view virtual override returns (uint256) {
         uint256 _depositedAssets = _totalSupply();
-        return
-            _isVaultCollateralized(_depositedAssets, _totalAssets())
-                ? _maxDeposit(_depositedAssets)
-                : 0;
+        return _isVaultCollateralized(_depositedAssets, _totalAssets()) ? _maxDeposit(_depositedAssets) : 0;
     }
 
     /// @inheritdoc IERC4626
-    function previewDeposit(
-        uint256 _assets
-    ) external view virtual override returns (uint256) {
-        return
-            _convertToShares(
-                _assets,
-                _totalSupply(),
-                _totalAssets(),
-                Math.Rounding.Down
-            );
+    function previewDeposit(uint256 _assets) external view virtual override returns (uint256) {
+        return _convertToShares(_assets, _totalSupply(), _totalAssets(), Math.Rounding.Down);
     }
 
     /// @inheritdoc IERC4626
     function maxMint(address) external view virtual override returns (uint256) {
         uint256 _depositedAssets = _totalSupply();
-        return
-            _isVaultCollateralized(_depositedAssets, _totalAssets())
-                ? _maxDeposit(_depositedAssets)
-                : 0;
+        return _isVaultCollateralized(_depositedAssets, _totalAssets()) ? _maxDeposit(_depositedAssets) : 0;
     }
 
     /// @inheritdoc IERC4626
-    function previewMint(
-        uint256 _shares
-    ) external view virtual override returns (uint256) {
-        return
-            _convertToAssets(
-                _shares,
-                _totalSupply(),
-                _totalAssets(),
-                Math.Rounding.Up
-            );
+    function previewMint(uint256 _shares) external view virtual override returns (uint256) {
+        return _convertToAssets(_shares, _totalSupply(), _totalAssets(), Math.Rounding.Up);
     }
 
     /// @inheritdoc IERC4626
-    function maxWithdraw(
-        address _owner
-    ) external view virtual override returns (uint256) {
+    function maxWithdraw(address _owner) external view virtual override returns (uint256) {
         return _maxWithdraw(_owner);
     }
 
     /// @inheritdoc IERC4626
-    function previewWithdraw(
-        uint256 _assets
-    ) external view virtual override returns (uint256) {
-        return
-            _convertToShares(
-                _assets,
-                _totalSupply(),
-                _totalAssets(),
-                Math.Rounding.Up
-            );
+    function previewWithdraw(uint256 _assets) external view virtual override returns (uint256) {
+        return _convertToShares(_assets, _totalSupply(), _totalAssets(), Math.Rounding.Up);
     }
 
     /// @inheritdoc IERC4626
-    function maxRedeem(
-        address _owner
-    ) external view virtual override returns (uint256) {
+    function maxRedeem(address _owner) external view virtual override returns (uint256) {
         return _maxRedeem(_owner);
     }
 
     /// @inheritdoc IERC4626
-    function previewRedeem(
-        uint256 _shares
-    ) external view virtual override returns (uint256) {
-        return
-            _convertToAssets(
-                _shares,
-                _totalSupply(),
-                _totalAssets(),
-                Math.Rounding.Down
-            );
+    function previewRedeem(uint256 _shares) external view virtual override returns (uint256) {
+        return _convertToAssets(_shares, _totalSupply(), _totalAssets(), Math.Rounding.Down);
     }
 
     /* ============ Deposit Functions ============ */
@@ -383,10 +302,7 @@ contract VaultV2 is IERC4626, ERC20Permit, Ownable, IVault {
      * @inheritdoc IERC4626
      * @dev Will revert if the Vault is under-collateralized.
      */
-    function deposit(
-        uint256 _assets,
-        address _receiver
-    ) external virtual override returns (uint256) {
+    function deposit(uint256 _assets, address _receiver) external virtual override returns (uint256) {
         return _depositAssets(_assets, msg.sender, _receiver, false);
     }
 
@@ -403,36 +319,19 @@ contract VaultV2 is IERC4626, ERC20Permit, Ownable, IVault {
      * @param _s S part of the secp256k1 signature
      * @return uint256 Amount of Vault shares minted to `_owner`.
      */
-    function depositWithPermit(
-        uint256 _assets,
-        address _owner,
-        uint256 _deadline,
-        uint8 _v,
-        bytes32 _r,
-        bytes32 _s
-    ) external returns (uint256) {
+    function depositWithPermit(uint256 _assets, address _owner, uint256 _deadline, uint8 _v, bytes32 _r, bytes32 _s)
+        external
+        returns (uint256)
+    {
         if (_owner != msg.sender) {
             revert PermitCallerNotOwner(msg.sender, _owner);
         }
 
-        IERC20Permit(address(_asset)).permit(
-            _owner,
-            address(this),
-            _assets,
-            _deadline,
-            _v,
-            _r,
-            _s
-        );
+        IERC20Permit(address(_asset)).permit(_owner, address(this), _assets, _deadline, _v, _r, _s);
 
         uint256 _allowance = _asset.allowance(_owner, address(this));
         if (_allowance != _assets) {
-            revert PermitAllowanceNotSet(
-                _owner,
-                address(this),
-                _assets,
-                _allowance
-            );
+            revert PermitAllowanceNotSet(_owner, address(this), _assets, _allowance);
         }
 
         return _depositAssets(_assets, _owner, _owner, false);
@@ -442,10 +341,7 @@ contract VaultV2 is IERC4626, ERC20Permit, Ownable, IVault {
      * @inheritdoc IERC4626
      * @dev Will revert if the Vault is under-collateralized.
      */
-    function mint(
-        uint256 _shares,
-        address _receiver
-    ) external virtual override returns (uint256) {
+    function mint(uint256 _shares, address _receiver) external virtual override returns (uint256) {
         return _depositAssets(_shares, msg.sender, _receiver, true);
     }
 
@@ -460,10 +356,7 @@ contract VaultV2 is IERC4626, ERC20Permit, Ownable, IVault {
 
         _depositAssets(_assets, _owner, _owner, false);
 
-        if (
-            _twabController.delegateOf(address(this), _owner) !=
-            SPONSORSHIP_ADDRESS
-        ) {
+        if (_twabController.delegateOf(address(this), _owner) != SPONSORSHIP_ADDRESS) {
             _twabController.sponsor(_owner);
         }
 
@@ -491,39 +384,20 @@ contract VaultV2 is IERC4626, ERC20Permit, Ownable, IVault {
     /* ============ Withdraw Functions ============ */
 
     /// @inheritdoc IERC4626
-    function withdraw(
-        uint256 _assets,
-        address _receiver,
-        address _owner
-    ) external virtual override returns (uint256) {
+    function withdraw(uint256 _assets, address _receiver, address _owner) external virtual override returns (uint256) {
         if (_assets > _maxWithdraw(_owner)) {
             revert WithdrawMoreThanMax(_owner, _assets, _maxWithdraw(_owner));
         }
 
         uint256 _depositedAssets = _totalSupply();
         uint256 _withdrawableAssets = _totalAssets();
-        bool _vaultCollateralized = _isVaultCollateralized(
-            _depositedAssets,
-            _withdrawableAssets
-        );
+        bool _vaultCollateralized = _isVaultCollateralized(_depositedAssets, _withdrawableAssets);
 
         uint256 _shares = _vaultCollateralized
             ? _assets
-            : _convertToShares(
-                _assets,
-                _depositedAssets,
-                _withdrawableAssets,
-                Math.Rounding.Up
-            );
+            : _convertToShares(_assets, _depositedAssets, _withdrawableAssets, Math.Rounding.Up);
 
-        uint256 _withdrawnAssets = _redeem(
-            msg.sender,
-            _receiver,
-            _owner,
-            _shares,
-            _assets,
-            _vaultCollateralized
-        );
+        uint256 _withdrawnAssets = _redeem(msg.sender, _receiver, _owner, _shares, _assets, _vaultCollateralized);
 
         if (_withdrawnAssets < _assets) {
             revert WithdrawAssetsLTRequested(_assets, _withdrawnAssets);
@@ -533,38 +407,18 @@ contract VaultV2 is IERC4626, ERC20Permit, Ownable, IVault {
     }
 
     /// @inheritdoc IERC4626
-    function redeem(
-        uint256 _shares,
-        address _receiver,
-        address _owner
-    ) external virtual override returns (uint256) {
+    function redeem(uint256 _shares, address _receiver, address _owner) external virtual override returns (uint256) {
         if (_shares > _maxRedeem(_owner)) {
             revert RedeemMoreThanMax(_owner, _shares, _maxRedeem(_owner));
         }
 
         uint256 _depositedAssets = _totalSupply();
         uint256 _withdrawableAssets = _totalAssets();
-        bool _vaultCollateralized = _isVaultCollateralized(
-            _depositedAssets,
-            _withdrawableAssets
-        );
+        bool _vaultCollateralized = _isVaultCollateralized(_depositedAssets, _withdrawableAssets);
 
-        uint256 _assets = _convertToAssets(
-            _shares,
-            _depositedAssets,
-            _withdrawableAssets,
-            Math.Rounding.Down
-        );
+        uint256 _assets = _convertToAssets(_shares, _depositedAssets, _withdrawableAssets, Math.Rounding.Down);
 
-        return
-            _redeem(
-                msg.sender,
-                _receiver,
-                _owner,
-                _shares,
-                _assets,
-                _vaultCollateralized
-            );
+        return _redeem(msg.sender, _receiver, _owner, _shares, _assets, _vaultCollateralized);
     }
 
     /* ============ Yield Functions ============ */
@@ -643,15 +497,9 @@ contract VaultV2 is IERC4626, ERC20Permit, Ownable, IVault {
         drawIdToDraw[currentDrawId] = draw;
     }
 
-    function finalizeDraw(
-        uint24 drawId,
-        bytes calldata _data
-    ) external onlyOwner {
+    function finalizeDraw(uint24 drawId, bytes calldata _data) external onlyOwner {
         if (block.timestamp < drawIdToDraw[drawId].drawEndTime) {
-            revert InvalidDrawPeriod(
-                block.timestamp,
-                drawIdToDraw[drawId].drawEndTime
-            );
+            revert InvalidDrawPeriod(block.timestamp, drawIdToDraw[drawId].drawEndTime);
         }
         if (drawIdToDraw[drawId].isFinalized) {
             revert AlreadyFinalized();
@@ -660,37 +508,24 @@ contract VaultV2 is IERC4626, ERC20Permit, Ownable, IVault {
         Draw storage draw = drawIdToDraw[drawId];
         draw.availableYieldAtEnd = _availableYieldBalance();
 
-        uint256 vaultTwabTotalSupply = _twabController
-            .getTotalSupplyTwabBetween(
-                address(this),
-                draw.drawStartTime,
-                draw.drawEndTime
-            );
-        SD59x18[] memory odds = _calculateTeamOdds(
-            teams,
-            drawId,
-            vaultTwabTotalSupply
-        );
+        uint256 vaultTwabTotalSupply =
+            _twabController.getTotalSupplyTwabBetween(address(this), draw.drawStartTime, draw.drawEndTime);
+        SD59x18[] memory odds = _calculateTeamOdds(teams, drawId, vaultTwabTotalSupply);
 
         // check if the team is winner
         for (uint256 i = 0; i < teams.length; i++) {
             Team memory team = teams[i];
 
-            uint256 teamSpecificRandomNumber = DrawCalculation
-                .calculatePseudoRandomNumber(
-                    drawId,
-                    address(this),
-                    team.teamId,
-                    vaultTwabTotalSupply,
-                    0 //TODO: uint256 _winningRandomNumber
-                );
+            uint256 teamSpecificRandomNumber = DrawCalculation.calculatePseudoRandomNumber(
+                drawId,
+                address(this),
+                team.teamId,
+                vaultTwabTotalSupply,
+                0 //TODO: uint256 _winningRandomNumber
+            );
 
             bool isWinner = DrawCalculation.isWinner(
-                teamSpecificRandomNumber,
-                team.teamTwab,
-                vaultTwabTotalSupply,
-                team.teamContributionFraction,
-                odds[i]
+                teamSpecificRandomNumber, team.teamTwab, vaultTwabTotalSupply, team.teamContributionFraction, odds[i]
             );
 
             if (isWinner) {
@@ -707,9 +542,7 @@ contract VaultV2 is IERC4626, ERC20Permit, Ownable, IVault {
         draw.isFinalized = true;
         currentDrawId++;
 
-        drawIdToPrize[drawId] =
-            _availableYieldBalance() -
-            draw.availableYieldAtStart;
+        drawIdToPrize[drawId] = _availableYieldBalance() - draw.availableYieldAtStart;
 
         emit DrawFinalized(drawId, drawIdToWinningTeamIds[drawId]);
     }
@@ -718,10 +551,7 @@ contract VaultV2 is IERC4626, ERC20Permit, Ownable, IVault {
     // finalizeDraw -> getDistributions -> setDistribution -> distributePrizes
     // Owner must call setDistribution before calling distributePrizes
     // because distributionPrize check whether the recipient and amount is valid or not based on the merkle proof
-    function distributePrizes(
-        uint24 drawId,
-        bytes memory _data
-    ) external onlyOwner {
+    function distributePrizes(uint24 drawId, bytes memory _data) external onlyOwner {
         if (!_isDistributionSet(drawId)) {
             revert DistributionNotSet(drawId);
         }
@@ -734,10 +564,7 @@ contract VaultV2 is IERC4626, ERC20Permit, Ownable, IVault {
         // only withdraw yield
         _yieldVault.withdraw(prize, address(this), address(this));
 
-        Distribution[] memory distributions = abi.decode(
-            _data,
-            (Distribution[])
-        );
+        Distribution[] memory distributions = abi.decode(_data, (Distribution[]));
 
         for (uint256 i = 0; i < distributions.length; i++) {
             Distribution memory distribution = distributions[i];
@@ -748,21 +575,10 @@ contract VaultV2 is IERC4626, ERC20Permit, Ownable, IVault {
             bytes32[] memory merkleProof = distribution.merkleProof;
 
             // Validate the distribution and transfer the funds to the recipient, otherwise revert if not valid
-            if (
-                _validateDistribution(
-                    drawId,
-                    index,
-                    recipient,
-                    amount,
-                    merkleProof
-                )
-            ) {
+            if (_validateDistribution(drawId, index, recipient, amount, merkleProof)) {
                 // TODO: call setDistribute function that tracks whether the distribution has done or not for each recipient
                 // Transfer the amount to the recipient
-                _asset.safeTransfer(
-                    distribution.recipient,
-                    distribution.amount
-                );
+                _asset.safeTransfer(distribution.recipient, distribution.amount);
                 // Emit that the prize have been distributed to the recipient
                 emit PrizeDistributed(drawId, recipient, amount);
             } else {
@@ -771,10 +587,7 @@ contract VaultV2 is IERC4626, ERC20Permit, Ownable, IVault {
         }
     }
 
-    function setDistribution(
-        uint24 drawId,
-        bytes32 merkleRoot
-    ) external onlyOwner {
+    function setDistribution(uint24 drawId, bytes32 merkleRoot) external onlyOwner {
         drawIdToMerkleRoot[drawId] = merkleRoot;
         emit DistributionSet(drawId, merkleRoot);
     }
@@ -784,9 +597,7 @@ contract VaultV2 is IERC4626, ERC20Permit, Ownable, IVault {
     }
 
     // getDistributions for each winning team
-    function getDistributions(
-        uint24 drawId
-    ) external view returns (address[] memory, uint256[] memory) {
+    function getDistributions(uint24 drawId) external view returns (address[] memory, uint256[] memory) {
         Team[] memory winningTeams = drawIdToWinningTeams[drawId];
         Draw memory draw = drawIdToDraw[drawId];
 
@@ -805,18 +616,10 @@ contract VaultV2 is IERC4626, ERC20Permit, Ownable, IVault {
 
             for (uint256 j = 0; j < team.teamMembers.length; j++) {
                 address recipient = team.teamMembers[j];
-                uint256 userTwab = _twabController.getTwabBetween(
-                    address(this),
-                    recipient,
-                    draw.drawStartTime,
-                    draw.drawEndTime
-                );
+                uint256 userTwab =
+                    _twabController.getTwabBetween(address(this), recipient, draw.drawStartTime, draw.drawEndTime);
 
-                uint256 memberPrize = Math.mulDiv(
-                    teamPrize,
-                    userTwab,
-                    team.teamTwab
-                );
+                uint256 memberPrize = Math.mulDiv(teamPrize, userTwab, team.teamTwab);
 
                 recipients[counter] = recipient;
                 amounts[counter] = memberPrize;
@@ -836,9 +639,7 @@ contract VaultV2 is IERC4626, ERC20Permit, Ownable, IVault {
     ) internal view returns (bool) {
         // TODO: check if the distribution has been done or not
 
-        bytes32 node = keccak256(
-            bytes.concat(keccak256(abi.encode(index, recipient, amount)))
-        );
+        bytes32 node = keccak256(bytes.concat(keccak256(abi.encode(index, recipient, amount))));
 
         // Generate the node that will be verified in the 'merkleRoot'
         bytes32 merkleRoot = drawIdToMerkleRoot[drawId];
@@ -853,9 +654,7 @@ contract VaultV2 is IERC4626, ERC20Permit, Ownable, IVault {
     }
 
     // calculate total twab of winning teams
-    function _winningTwabTotal(
-        uint24 drawId
-    ) internal view returns (uint256 totalTwab) {
+    function _winningTwabTotal(uint24 drawId) internal view returns (uint256 totalTwab) {
         Team[] memory winningTeams = drawIdToWinningTeams[drawId];
         for (uint256 i = 0; i < winningTeams.length; i++) {
             totalTwab += winningTeams[i].teamTwab;
@@ -863,37 +662,31 @@ contract VaultV2 is IERC4626, ERC20Permit, Ownable, IVault {
         return totalTwab;
     }
 
-    function calculateTeamOdds(
-        Team[] memory teams,
-        uint24 drawId,
-        uint256 vaultTwabTotalSupply
-    ) external view returns (SD59x18[] memory) {
+    function calculateTeamOdds(Team[] memory teams, uint24 drawId, uint256 vaultTwabTotalSupply)
+        external
+        view
+        returns (SD59x18[] memory)
+    {
         return _calculateTeamOdds(teams, drawId, vaultTwabTotalSupply);
     }
 
-    function getWinningTeams(
-        uint24 drawId
-    ) external view returns (Team[] memory) {
+    function getWinningTeams(uint24 drawId) external view returns (Team[] memory) {
         return drawIdToWinningTeams[drawId];
     }
 
     // calculate team odds corresponding to each team
-    function _calculateTeamOdds(
-        Team[] memory teams,
-        uint24 drawId,
-        uint256 vaultTwabTotalSupply
-    ) internal view returns (SD59x18[] memory odds) {
+    function _calculateTeamOdds(Team[] memory teams, uint24 drawId, uint256 vaultTwabTotalSupply)
+        internal
+        view
+        returns (SD59x18[] memory odds)
+    {
         odds = new SD59x18[](teams.length);
         SD59x18 convertedTotalSupply = convert(int256(vaultTwabTotalSupply));
 
         for (uint256 i = 0; i < teams.length; i++) {
-            uint256 teamTwab = _calculateTeamTwabBetween(
-                teams[i].teamMembers,
-                drawId
-            );
+            uint256 teamTwab = _calculateTeamTwabBetween(teams[i].teamMembers, drawId);
             SD59x18 convertedTeamWab = convert(int256(teamTwab));
-            SD59x18 teamOdds = sd(1e18) -
-                (convertedTeamWab / convertedTotalSupply);
+            SD59x18 teamOdds = sd(1e18) - (convertedTeamWab / convertedTotalSupply);
 
             odds[i] = teamOdds;
         }
@@ -911,14 +704,8 @@ contract VaultV2 is IERC4626, ERC20Permit, Ownable, IVault {
         for (uint256 i = 0; i < winningTeams.length; i++) {
             uint256 teamTwab = winningTeams[i].teamTwab;
 
-            uint256 teamPrize = Math.mulDiv(
-                prize,
-                teamTwab,
-                winningTeamTotalTwab
-            );
-            drawIdToWinningTeamPrizes[drawId][
-                winningTeams[i].teamId
-            ] = teamPrize;
+            uint256 teamPrize = Math.mulDiv(prize, teamTwab, winningTeamTotalTwab);
+            drawIdToWinningTeamPrizes[drawId][winningTeams[i].teamId] = teamPrize;
         }
     }
 
@@ -926,29 +713,22 @@ contract VaultV2 is IERC4626, ERC20Permit, Ownable, IVault {
         return drawIdToDraw[drawId];
     }
 
-    function calculateTeamTwabBetween(
-        address[] memory teamMembers,
-        uint24 drawId
-    ) external view returns (uint256) {
+    function calculateTeamTwabBetween(address[] memory teamMembers, uint24 drawId) external view returns (uint256) {
         return _calculateTeamTwabBetween(teamMembers, drawId);
     }
 
-    function _calculateTeamTwabBetween(
-        address[] memory teamMembers,
-        uint24 drawId
-    ) internal view returns (uint256 teamTwab) {
+    function _calculateTeamTwabBetween(address[] memory teamMembers, uint24 drawId)
+        internal
+        view
+        returns (uint256 teamTwab)
+    {
         Draw memory draw = drawIdToDraw[drawId];
 
         uint256 drawStartTime = draw.drawStartTime;
         uint256 drawEndTime = draw.drawEndTime;
 
         for (uint256 i = 0; i < teamMembers.length; i++) {
-            teamTwab += _twabController.getTwabBetween(
-                address(this),
-                teamMembers[i],
-                drawStartTime,
-                drawEndTime
-            );
+            teamTwab += _twabController.getTwabBetween(address(this), teamMembers[i], drawStartTime, drawEndTime);
         }
 
         return teamTwab;
@@ -1009,9 +789,7 @@ contract VaultV2 is IERC4626, ERC20Permit, Ownable, IVault {
      * @param yieldFeePercentage_ Yield fee percentage
      * @return uint256 New yield fee percentage
      */
-    function setYieldFeePercentage(
-        uint32 yieldFeePercentage_
-    ) external onlyOwner returns (uint256) {
+    function setYieldFeePercentage(uint32 yieldFeePercentage_) external onlyOwner returns (uint256) {
         _setYieldFeePercentage(yieldFeePercentage_);
 
         emit YieldFeePercentageSet(yieldFeePercentage_);
@@ -1023,9 +801,7 @@ contract VaultV2 is IERC4626, ERC20Permit, Ownable, IVault {
      * @param yieldFeeRecipient_ Address of the fee recipient
      * @return address New fee recipient address
      */
-    function setYieldFeeRecipient(
-        address yieldFeeRecipient_
-    ) external onlyOwner returns (address) {
+    function setYieldFeeRecipient(address yieldFeeRecipient_) external onlyOwner returns (address) {
         _setYieldFeeRecipient(yieldFeeRecipient_);
 
         emit YieldFeeRecipientSet(yieldFeeRecipient_);
@@ -1101,9 +877,7 @@ contract VaultV2 is IERC4626, ERC20Permit, Ownable, IVault {
      * @param _account The user to retrieve the hooks for
      * @return VaultHooks The hooks for the given user
      */
-    function getHooks(
-        address _account
-    ) external view returns (VaultHooks memory) {
+    function getHooks(address _account) external view returns (VaultHooks memory) {
         return _hooks[_account];
     }
 
@@ -1120,13 +894,9 @@ contract VaultV2 is IERC4626, ERC20Permit, Ownable, IVault {
      * @return bool True if the attempt was successful, false otherwise
      * @return uint8 Token decimals number
      */
-    function _tryGetAssetDecimals(
-        IERC20 asset_
-    ) private view returns (bool, uint8) {
-        (bool success, bytes memory encodedDecimals) = address(asset_)
-            .staticcall(
-                abi.encodeWithSelector(IERC20Metadata.decimals.selector)
-            );
+    function _tryGetAssetDecimals(IERC20 asset_) private view returns (bool, uint8) {
+        (bool success, bytes memory encodedDecimals) =
+            address(asset_).staticcall(abi.encodeWithSelector(IERC20Metadata.decimals.selector));
         if (success && encodedDecimals.length >= 32) {
             uint256 returnedDecimals = abi.decode(encodedDecimals, (uint256));
             if (returnedDecimals <= type(uint8).max) {
@@ -1181,19 +951,9 @@ contract VaultV2 is IERC4626, ERC20Permit, Ownable, IVault {
             return _assets;
         }
 
-        uint256 _collateralAssets = _collateral(
-            _depositedAssets,
-            _withdrawableAssets
-        );
+        uint256 _collateralAssets = _collateral(_depositedAssets, _withdrawableAssets);
 
-        return
-            _collateralAssets == 0
-                ? 0
-                : _assets.mulDiv(
-                    _depositedAssets,
-                    _collateralAssets,
-                    _rounding
-                );
+        return _collateralAssets == 0 ? 0 : _assets.mulDiv(_depositedAssets, _collateralAssets, _rounding);
     }
 
     /**
@@ -1214,19 +974,9 @@ contract VaultV2 is IERC4626, ERC20Permit, Ownable, IVault {
             return _shares;
         }
 
-        uint256 _collateralAssets = _collateral(
-            _depositedAssets,
-            _withdrawableAssets
-        );
+        uint256 _collateralAssets = _collateral(_depositedAssets, _withdrawableAssets);
 
-        return
-            _collateralAssets == 0
-                ? 0
-                : _shares.mulDiv(
-                    _collateralAssets,
-                    _depositedAssets,
-                    _rounding
-                );
+        return _collateralAssets == 0 ? 0 : _shares.mulDiv(_collateralAssets, _depositedAssets, _rounding);
     }
 
     /* ============ Max / Preview Functions ============ */
@@ -1237,18 +987,13 @@ contract VaultV2 is IERC4626, ERC20Permit, Ownable, IVault {
      * @param _depositedAssets Assets deposited into the YieldVault
      * @return uint256 Amount of underlying assets that can be deposited
      */
-    function _maxDeposit(
-        uint256 _depositedAssets
-    ) internal view returns (uint256) {
+    function _maxDeposit(uint256 _depositedAssets) internal view returns (uint256) {
         uint256 _vaultMaxDeposit = UINT96_MAX - _depositedAssets;
         uint256 _yieldVaultMaxDeposit = _yieldVault.maxDeposit(address(this));
 
         // Vault shares are minted 1:1 when the vault is collateralized,
         // so maxDeposit and maxMint return the same value
-        return
-            _yieldVaultMaxDeposit < _vaultMaxDeposit
-                ? _yieldVaultMaxDeposit
-                : _vaultMaxDeposit;
+        return _yieldVaultMaxDeposit < _vaultMaxDeposit ? _yieldVaultMaxDeposit : _vaultMaxDeposit;
     }
 
     /**
@@ -1258,13 +1003,7 @@ contract VaultV2 is IERC4626, ERC20Permit, Ownable, IVault {
      * @return uint256 Amount of the underlying asset that can be withdrawn
      */
     function _maxWithdraw(address _owner) internal view returns (uint256) {
-        return
-            _convertToAssets(
-                _balanceOf(_owner),
-                _totalSupply(),
-                _totalAssets(),
-                Math.Rounding.Down
-            );
+        return _convertToAssets(_balanceOf(_owner), _totalSupply(), _totalAssets(), Math.Rounding.Down);
     }
 
     /**
@@ -1292,16 +1031,10 @@ contract VaultV2 is IERC4626, ERC20Permit, Ownable, IVault {
         uint256 _depositedAssets = _totalSupply();
         uint256 _withdrawableAssets = _totalAssets();
         uint256 _assetsAllocated = _convertToAssets(
-            _depositedAssets + _yieldFeeShares,
-            _depositedAssets,
-            _withdrawableAssets,
-            Math.Rounding.Up
+            _depositedAssets + _yieldFeeShares, _depositedAssets, _withdrawableAssets, Math.Rounding.Up
         );
 
-        return
-            _assetsAllocated > _withdrawableAssets
-                ? 0
-                : _withdrawableAssets - _assetsAllocated;
+        return _assetsAllocated > _withdrawableAssets ? 0 : _withdrawableAssets - _assetsAllocated;
     }
 
     /**
@@ -1309,9 +1042,7 @@ contract VaultV2 is IERC4626, ERC20Permit, Ownable, IVault {
      * @param _availableYield Total amount of yield available
      * @return uint256 Available yield fee balance
      */
-    function _availableYieldFeeBalance(
-        uint256 _availableYield
-    ) internal view returns (uint256) {
+    function _availableYieldFeeBalance(uint256 _availableYield) internal view returns (uint256) {
         return (_availableYield * _yieldFeePercentage) / FEE_PRECISION;
     }
 
@@ -1330,9 +1061,7 @@ contract VaultV2 is IERC4626, ERC20Permit, Ownable, IVault {
      * @param _token Address of the token to get available balance for
      * @return uint256 Available amount of `_token`
      */
-    function _liquidatableBalanceOf(
-        address _token
-    ) internal view returns (uint256) {
+    function _liquidatableBalanceOf(address _token) internal view returns (uint256) {
         if (_token != address(this)) {
             revert LiquidationTokenOutNotVaultShare(_token, address(this));
         }
@@ -1340,8 +1069,7 @@ contract VaultV2 is IERC4626, ERC20Permit, Ownable, IVault {
         uint256 _availableYield = _availableYieldBalance();
 
         unchecked {
-            return
-                _availableYield -= _availableYieldFeeBalance(_availableYield);
+            return _availableYield -= _availableYieldFeeBalance(_availableYield);
         }
     }
 
@@ -1362,11 +1090,7 @@ contract VaultV2 is IERC4626, ERC20Permit, Ownable, IVault {
      *        so we don't transfer any assets from the user wallet into the vault
      * @dev Will revert if 0 shares are minted back to the receiver.
      */
-    function _deposit(
-        address _caller,
-        address _receiver,
-        uint256 _assets
-    ) internal {
+    function _deposit(address _caller, address _receiver, uint256 _assets) internal {
         // It is only possible to deposit when the vault is collateralized
         // Shares are backed 1:1 by assets
         if (_assets == 0) revert MintZeroShares();
@@ -1390,11 +1114,7 @@ contract VaultV2 is IERC4626, ERC20Permit, Ownable, IVault {
                 }
             }
 
-            _asset.safeTransferFrom(
-                _caller,
-                address(this),
-                _assetsDeposit != 0 ? _assetsDeposit : _assets
-            );
+            _asset.safeTransferFrom(_caller, address(this), _assetsDeposit != 0 ? _assetsDeposit : _assets);
         }
 
         _yieldVault.deposit(_assets, address(this));
@@ -1414,12 +1134,10 @@ contract VaultV2 is IERC4626, ERC20Permit, Ownable, IVault {
      * @param _isMint Whether the function is called to mint or deposit
      * @return uint256 Amount of shares minted to `_receiver`
      */
-    function _depositAssets(
-        uint256 _assets,
-        address _owner,
-        address _receiver,
-        bool _isMint
-    ) internal returns (uint256) {
+    function _depositAssets(uint256 _assets, address _owner, address _receiver, bool _isMint)
+        internal
+        returns (uint256)
+    {
         uint256 _depositedAssets = _totalSupply();
         uint256 _withdrawableAssets = _totalAssets();
 
@@ -1427,18 +1145,10 @@ contract VaultV2 is IERC4626, ERC20Permit, Ownable, IVault {
 
         if (_assets > _maxDeposit(_depositedAssets)) {
             if (_isMint) {
-                revert MintMoreThanMax(
-                    _receiver,
-                    _assets,
-                    _maxDeposit(_depositedAssets)
-                );
+                revert MintMoreThanMax(_receiver, _assets, _maxDeposit(_depositedAssets));
             }
 
-            revert DepositMoreThanMax(
-                _receiver,
-                _assets,
-                _maxDeposit(_depositedAssets)
-            );
+            revert DepositMoreThanMax(_receiver, _assets, _maxDeposit(_depositedAssets));
         }
 
         _deposit(_owner, _receiver, _assets);
@@ -1474,11 +1184,7 @@ contract VaultV2 is IERC4626, ERC20Permit, Ownable, IVault {
         uint256 _yieldVaultShares;
 
         if (!_vaultCollateralized) {
-            _yieldVaultShares = _shares.mulDiv(
-                _yieldVault.maxRedeem(address(this)),
-                _totalSupply(),
-                Math.Rounding.Down
-            );
+            _yieldVaultShares = _shares.mulDiv(_yieldVault.maxRedeem(address(this)), _totalSupply(), Math.Rounding.Down);
         }
 
         // If _asset is ERC777, `transfer` can trigger a reentrancy AFTER the transfer happens through the
@@ -1494,11 +1200,7 @@ contract VaultV2 is IERC4626, ERC20Permit, Ownable, IVault {
             _yieldVault.withdraw(_assets, _receiver, address(this));
         } else {
             // Otherwise, redeem is used to avoid burning too many YieldVault shares
-            _assets = _yieldVault.redeem(
-                _yieldVaultShares,
-                _receiver,
-                address(this)
-            );
+            _assets = _yieldVault.redeem(_yieldVaultShares, _receiver, address(this));
         }
 
         if (_assets == 0) revert WithdrawZeroAssets();
@@ -1517,10 +1219,7 @@ contract VaultV2 is IERC4626, ERC20Permit, Ownable, IVault {
      * @param _receiver Address that will receive the minted shares
      * @param _shares Shares to mint
      */
-    function _mint(
-        address _receiver,
-        uint256 _shares
-    ) internal virtual override {
+    function _mint(address _receiver, uint256 _shares) internal virtual override {
         _twabController.mint(_receiver, SafeCast.toUint96(_shares));
         emit Transfer(address(0), _receiver, _shares);
     }
@@ -1547,11 +1246,7 @@ contract VaultV2 is IERC4626, ERC20Permit, Ownable, IVault {
      * @param _to Address to transfer to
      * @param _shares Shares to transfer
      */
-    function _transfer(
-        address _from,
-        address _to,
-        uint256 _shares
-    ) internal virtual override {
+    function _transfer(address _from, address _to, uint256 _shares) internal virtual override {
         _twabController.transfer(_from, _to, SafeCast.toUint96(_shares));
         emit Transfer(_from, _to, _shares);
     }
@@ -1568,10 +1263,7 @@ contract VaultV2 is IERC4626, ERC20Permit, Ownable, IVault {
      * @param _withdrawableAssets Assets withdrawable from the YieldVault
      * @return uint256 Available collateral
      */
-    function _collateral(
-        uint256 _depositedAssets,
-        uint256 _withdrawableAssets
-    ) internal pure returns (uint256) {
+    function _collateral(uint256 _depositedAssets, uint256 _withdrawableAssets) internal pure returns (uint256) {
         // If the Vault is collateralized, users can only withdraw the amount of underlying assets they deposited.
         if (_isVaultCollateralized(_depositedAssets, _withdrawableAssets)) {
             return _depositedAssets;
@@ -1590,10 +1282,11 @@ contract VaultV2 is IERC4626, ERC20Permit, Ownable, IVault {
      * @param _withdrawableAssets Assets withdrawable from the YieldVault
      * @return bool True if the vault is collateralized, false otherwise
      */
-    function _isVaultCollateralized(
-        uint256 _depositedAssets,
-        uint256 _withdrawableAssets
-    ) internal pure returns (bool) {
+    function _isVaultCollateralized(uint256 _depositedAssets, uint256 _withdrawableAssets)
+        internal
+        pure
+        returns (bool)
+    {
         return _withdrawableAssets >= _depositedAssets;
     }
 
@@ -1616,10 +1309,7 @@ contract VaultV2 is IERC4626, ERC20Permit, Ownable, IVault {
      */
     function _setYieldFeePercentage(uint32 yieldFeePercentage_) internal {
         if (yieldFeePercentage_ >= FEE_PRECISION) {
-            revert YieldFeePercentageGtePrecision(
-                yieldFeePercentage_,
-                FEE_PRECISION
-            );
+            revert YieldFeePercentageGtePrecision(yieldFeePercentage_, FEE_PRECISION);
         }
         _yieldFeePercentage = yieldFeePercentage_;
     }
