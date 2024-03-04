@@ -477,6 +477,12 @@ contract VaultV2 is IERC4626, ERC20Permit, Ownable, IVault {
 
     /* ============ Draw Functions ============ */
 
+    /**
+     * @notice Start a new draw. onlyOwner can call this function.
+     * @dev Will revert if the drawStartTime is in the past.
+     * drawEndTime should be: drawStartTime + 7 days
+     * @param drawStartTime Start time of the draw
+     */
     function startDrawPeriod(uint256 drawStartTime) external onlyOwner {
         uint256 drawEndTime = drawStartTime + 7 days;
         if (block.timestamp > drawStartTime) {
@@ -497,6 +503,12 @@ contract VaultV2 is IERC4626, ERC20Permit, Ownable, IVault {
         drawIdToDraw[currentDrawId] = draw;
     }
 
+    /**
+     * @notice Finalize the draw and calculate the winning team. onlyOwner can call this function.
+     * @dev calculate the winning team based on the encoded Team[] input and pseudo random number
+     * @param drawId id of the draw
+     * @param _data Team[] -> (uint8 teamId, uint256 teamTwab, uint256 teamPoints, SD59x18 teamContributionFraction, address[] teamMembers)
+     */
     function finalizeDraw(uint24 drawId, bytes calldata _data) external onlyOwner {
         if (block.timestamp < drawIdToDraw[drawId].drawEndTime) {
             revert InvalidDrawPeriod(block.timestamp, drawIdToDraw[drawId].drawEndTime);
@@ -547,10 +559,16 @@ contract VaultV2 is IERC4626, ERC20Permit, Ownable, IVault {
         emit DrawFinalized(drawId, drawIdToWinningTeamIds[drawId]);
     }
 
-    // _data: Distribution[] -> (address recipient, uint256 index, uint256 amount, bytes32[] merkleProof)
-    // finalizeDraw -> getDistributions -> setDistribution -> distributePrizes
-    // Owner must call setDistribution before calling distributePrizes
-    // because distributionPrize check whether the recipient and amount is valid or not based on the merkle proof
+    /**
+     * @notice Distribute the prize to the winning team members. onlyOwner can call this function.
+     * Owner must call setDistribution before calling distributePrizes
+     * because distributionPrize check whether the recipient and amount is valid or not based on the merkle proof
+     * @dev Will revert if the distribution has not been set or the recipient is invalid.
+     * validate the merkle proof and distribute the prize to the recipient
+     * finalizeDraw -> getDistributions -> setDistribution -> distributePrizes
+     * @param drawId id of the draw
+     * @param _data Distribution[] -> (address recipient, uint256 index, uint256 amount, bytes32[] merkleProof)
+     */
     function distributePrizes(uint24 drawId, bytes memory _data) external onlyOwner {
         if (!_isDistributionSet(drawId)) {
             revert DistributionNotSet(drawId);
@@ -576,7 +594,10 @@ contract VaultV2 is IERC4626, ERC20Permit, Ownable, IVault {
 
             // Validate the distribution and transfer the funds to the recipient, otherwise revert if not valid
             if (_validateDistribution(drawId, index, recipient, amount, merkleProof)) {
-                // TODO: call setDistribute function that tracks whether the distribution has done or not for each recipient
+                // TODO: call the function that tracks whether the distribution has done or not for each recipient
+                // revert if the distribution has been done
+                // check the bitmap based on index
+
                 // Transfer the amount to the recipient
                 _asset.safeTransfer(distribution.recipient, distribution.amount);
                 // Emit that the prize have been distributed to the recipient
@@ -587,6 +608,13 @@ contract VaultV2 is IERC4626, ERC20Permit, Ownable, IVault {
         }
     }
 
+    /**
+     * @notice Set the merkle root of the distribution. onlyOwner can call this function.
+     * @dev Owner must call setDistribution before calling distributePrizes.
+     * merkleRoot is the root of the merkle tree that contains [index, recipient, amount]
+     * @param drawId id of the draw
+     * @param merkleRoot merkle root of the distribution corresponding to the drawId
+     */
     function setDistribution(uint24 drawId, bytes32 merkleRoot) external onlyOwner {
         drawIdToMerkleRoot[drawId] = merkleRoot;
         emit DistributionSet(drawId, merkleRoot);
@@ -630,6 +658,18 @@ contract VaultV2 is IERC4626, ERC20Permit, Ownable, IVault {
         return (recipients, amounts);
     }
 
+    /**
+     * @notice Validate the recipient is valid to recieve the prize.
+     * @dev Validate the merkle proof of the recipient and the amount.
+     * revert if the merkle proof is not valid corresponding to the merkle root
+     * that has been set by the owner.
+     * @param drawId id of the draw
+     * @param index index of the recipient
+     * @param recipient address of the recipient
+     * @param amount amount of the recipient
+     * @param merkleProof merkle proof of the recipient
+     * @return bool true if the MerkleProof.verify is valid
+     */
     function _validateDistribution(
         uint24 drawId,
         uint256 index,
@@ -674,7 +714,14 @@ contract VaultV2 is IERC4626, ERC20Permit, Ownable, IVault {
         return drawIdToWinningTeams[drawId];
     }
 
-    // calculate team odds corresponding to each team
+    /**
+     * @notice Calculate the team odds that will be used to determine the winning team.
+     * @dev Calculate the odds for each team based on the teamTwab and the total supply of the vault.
+     * @param teams array of Team
+     * @param drawId id of the draw
+     * @param vaultTwabTotalSupply total supply twab of the vault
+     * @return odds array of team odds corresponding to the teams array. odds is converted to 18 decimals
+     */
     function _calculateTeamOdds(Team[] memory teams, uint24 drawId, uint256 vaultTwabTotalSupply)
         internal
         view
@@ -694,6 +741,11 @@ contract VaultV2 is IERC4626, ERC20Permit, Ownable, IVault {
         return odds;
     }
 
+    /**
+     * @notice Finalize the prize for the winning team.
+     * @dev Calculate the prize for each winning team based on the teamTwab and the total twab of the winning teams.
+     * @param drawId id of the draw
+     */
     function _finalizeTeamPrize(uint24 drawId) internal {
         Draw memory draw = drawIdToDraw[drawId];
         Team[] memory winningTeams = drawIdToWinningTeams[drawId];
@@ -713,10 +765,22 @@ contract VaultV2 is IERC4626, ERC20Permit, Ownable, IVault {
         return drawIdToDraw[drawId];
     }
 
+    /**
+     * @notice Get the total twab of the team members between the drawStartTime and drawEndTime.
+     * @param teamMembers address[] of the team members
+     * @param drawId id of the draw
+     * @return uint256 total twab of the team
+     */
     function calculateTeamTwabBetween(address[] memory teamMembers, uint24 drawId) external view returns (uint256) {
         return _calculateTeamTwabBetween(teamMembers, drawId);
     }
 
+    /**
+     * @notice Get the total twab of the team members between the drawStartTime and drawEndTime.
+     * @param teamMembers address[] of the team members
+     * @param drawId id of the draw
+     * @return teamTwab total twab of the team
+     */
     function _calculateTeamTwabBetween(address[] memory teamMembers, uint24 drawId)
         internal
         view
