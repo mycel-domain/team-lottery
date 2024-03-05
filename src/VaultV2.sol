@@ -35,7 +35,6 @@ contract VaultV2 is IERC4626, ERC20Permit, Ownable, IVault {
         uint8 teamId;
         uint256 teamTwab;
         uint256 teamPoints;
-        SD59x18 teamContributionFraction; //TODO:
         address[] teamMembers;
     }
 
@@ -507,14 +506,19 @@ contract VaultV2 is IERC4626, ERC20Permit, Ownable, IVault {
      * @notice Finalize the draw and calculate the winning team. onlyOwner can call this function.
      * @dev calculate the winning team based on the encoded Team[] input and pseudo random number
      * @param drawId id of the draw
-     * @param _data Team[] -> (uint8 teamId, uint256 teamTwab, uint256 teamPoints, SD59x18 teamContributionFraction, address[] teamMembers)
+     * @param _winningRandomNumber The winning random number for the draw
+     * @param _data Team[] -> (uint8 teamId, uint256 teamTwab, uint256 teamPoints, address[] teamMembers)
      */
-    function finalizeDraw(uint24 drawId, bytes calldata _data) external onlyOwner {
+    function finalizeDraw(uint24 drawId, uint256 _winningRandomNumber, bytes calldata _data) external onlyOwner {
         if (block.timestamp < drawIdToDraw[drawId].drawEndTime) {
             revert InvalidDrawPeriod(block.timestamp, drawIdToDraw[drawId].drawEndTime);
         }
         if (drawIdToDraw[drawId].isFinalized) {
             revert AlreadyFinalized();
+        }
+
+        if (_winningRandomNumber == 0) {
+            revert RandomNumberIsZero();
         }
         Team[] memory teams = abi.decode(_data, (Team[]));
         Draw storage draw = drawIdToDraw[drawId];
@@ -527,17 +531,15 @@ contract VaultV2 is IERC4626, ERC20Permit, Ownable, IVault {
         // check if the team is winner
         for (uint256 i = 0; i < teams.length; i++) {
             Team memory team = teams[i];
+            SD59x18 teamContributionFraction =
+                sd(SafeCast.toInt256(team.teamTwab)).div(sd(SafeCast.toInt256(vaultTwabTotalSupply)));
 
             uint256 teamSpecificRandomNumber = DrawCalculation.calculatePseudoRandomNumber(
-                drawId,
-                address(this),
-                team.teamId,
-                vaultTwabTotalSupply,
-                0 //TODO: uint256 _winningRandomNumber
+                drawId, address(this), team.teamId, vaultTwabTotalSupply, _winningRandomNumber
             );
 
             bool isWinner = DrawCalculation.isWinner(
-                teamSpecificRandomNumber, team.teamTwab, vaultTwabTotalSupply, team.teamContributionFraction, odds[i]
+                teamSpecificRandomNumber, team.teamTwab, vaultTwabTotalSupply, teamContributionFraction, odds[i]
             );
 
             if (isWinner) {
@@ -556,7 +558,7 @@ contract VaultV2 is IERC4626, ERC20Permit, Ownable, IVault {
 
         drawIdToPrize[drawId] = _availableYieldBalance() - draw.availableYieldAtStart;
 
-        emit DrawFinalized(drawId, drawIdToWinningTeamIds[drawId]);
+        emit DrawFinalized(drawId, drawIdToWinningTeamIds[drawId], _winningRandomNumber);
     }
 
     /**

@@ -84,7 +84,7 @@ interface IVault is IERC4626 {
      */
     event PrizeDistributed(uint24 indexed drawId, address recipient, uint256 amount);
 
-    event DrawFinalized(uint24 indexed drawId, uint8[] winningTeams);
+    event DrawFinalized(uint24 indexed drawId, uint8[] winningTeams, uint256 winningRandomNumber);
 
     event DistributionSet(uint24 indexed drawId, bytes32 merkleRoot);
 
@@ -272,4 +272,6 @@ interface IVault is IERC4626 {
     error InvalidAmount();
 
     error DistributionNotSet(uint24 drawId);
+
+    error RandomNumberIsZero();
 }
