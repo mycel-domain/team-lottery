@@ -76,6 +76,8 @@ interface IVault is IERC4626 {
      */
     event Sweep(address indexed caller, uint256 assets);
 
+		event ClaimerSet(address indexed claimer);
+
     /**
      * @notice Emitted when a user sweeps assets held by the Vault into the YieldVault.
      * @param drawId The draw id
