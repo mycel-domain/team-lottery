@@ -76,7 +76,7 @@ interface IVault is IERC4626 {
      */
     event Sweep(address indexed caller, uint256 assets);
 
-		event ClaimerSet(address indexed claimer);
+    event ClaimerSet(address indexed claimer);
 
     /**
      * @notice Emitted when a user sweeps assets held by the Vault into the YieldVault.
@@ -84,11 +84,13 @@ interface IVault is IERC4626 {
      * @param recipient The recipient of the prize
      * @param amount The amount of the prize
      */
-    event PrizeDistributed(uint24 indexed drawId, address recipient, uint256 amount);
+    event PrizeDistributed(uint24 indexed drawId, address indexed recipient, uint256 amount);
 
     event DrawFinalized(uint24 indexed drawId, uint8[] winningTeams, uint256 winningRandomNumber);
 
     event DistributionSet(uint24 indexed drawId, bytes32 merkleRoot);
+
+    event NewDrawCreated(uint24 indexed drawId, uint256 drawStartPeriod, uint256 drawEndPeriod);
 
     /* ============ Errors ============ */
 

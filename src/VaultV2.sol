@@ -502,6 +502,7 @@ contract VaultV2 is IERC4626, ERC20Permit, Ownable, IVault {
 
         draws.push(draw);
         drawIdToDraw[currentDrawId] = draw;
+        emit NewDrawCreated(currentDrawId, drawStartTime, drawEndTime);
     }
 
     /**

@@ -5,6 +5,7 @@
   "scripts": {
     "build": "forge build",
     "compile": "forge compile",
-    "test": "forge test --no-match-contract Fork"
+    "test": "forge test --no-match-contract Fork",
+		"test:vault" : "forge test --match-path test/Vault.t.sol"
   }
 }
