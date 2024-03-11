@@ -5,6 +5,9 @@
   "scripts": {
     "build": "forge build",
     "compile": "forge compile",
-    "test": "forge test --no-match-contract Fork"
+    "test": "forge test --no-match-contract Fork",
+    "test:vault": "forge test --match-path test/Vault.t.sol",
+    "deploy:vault-testnet": "forge script script/Vault.s.sol:DeployVault --rpc-url $OP_SEPOLIA_URL --broadcast -vvvv --etherscan-api-key $ETHERSCAN_OPTIMISM_API_KEY --verify",
+    "deploy:twab": "forge script script/Twab.s.sol:DeployTwab --rpc-url $OP_SEPOLIA_URL --broadcast -vvvv --etherscan-api-key $ETHERSCAN_OPTIMISM_API_KEY --verify"
   }
 }

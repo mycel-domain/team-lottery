@@ -7,59 +7,52 @@ import "forge-std/console.sol";
 import {TwabController} from "pt-v5-twab-controller/TwabController.sol";
 import {ERC20, IERC20} from "openzeppelin-contracts/token/ERC20/ERC20.sol";
 import {IERC4626} from "openzeppelin-contracts/interfaces/IERC4626.sol";
-import {VaultV2 as Vault} from "../src/VaultV2.sol";
-import {IWETH} from "../test/mock/WETH.sol";
+
+import "../src/VaultV2.sol";
+import "../src/testnet/ERC20Mintable.sol";
+import "../src/testnet/TokenFaucet.sol";
+import "../src/testnet/YieldVaultMintRate.sol";
 
 contract DeployVault is Script {
     uint256 deployerPrivateKey = vm.envUint("DEPLOYER_PRIVATE_KEY");
     address private _claimer = 0x06aa005386F53Ba7b980c61e0D067CaBc7602a62;
-    address private _yieldFeeRecipient =
-        0x06aa005386F53Ba7b980c61e0D067CaBc7602a62;
+    address private _yieldFeeRecipient = 0x06aa005386F53Ba7b980c61e0D067CaBc7602a62;
     address private _owner = 0x06aa005386F53Ba7b980c61e0D067CaBc7602a62;
 
-    IERC4626 yieldVault;
-    IERC20 UNDERLYING_ASSET_ADDRESS;
-    IERC20 AToken;
-    TwabController twabController;
+    VaultV2 vault;
+    TwabController twabController = TwabController(0x845a658444e7b344B0c336E54D46F59bd323c65e);
+    ERC20Mintable public asset = ERC20Mintable(0x80Bf46c2E683251f0fecAfC39F636494d4623c80);
+    TokenFaucet public faucet = TokenFaucet(0x23c4b10FF712CAaf7DA6A9c9eeDFa7C7739b7802);
+    YieldVaultMintRate public yieldVaultMintRate = YieldVaultMintRate(0x800Ae5c3853FeA6d3f82131285dD80D6C65494d6);
 
-    function setUp() public {
-        configureChain();
-    }
+    function _deploydVault() internal {
+        // twabController = new TwabController(3600, uint32(block.timestamp));
+        // asset = new ERC20Mintable("USDC", "USDC", 6, _owner);
+        // faucet = new TokenFaucet();
+        // yieldVaultMintRate = new YieldVaultMintRate(asset, "Spore USDC Yield Vault", "syvUSDC", _owner);
 
-    function run() external {
-        vm.startBroadcast(deployerPrivateKey);
-
-        Vault vault = new Vault(
-            UNDERLYING_ASSET_ADDRESS,
-            "Vault waUSDC",
-            "vwaUSDC",
+        vault = new VaultV2(
+            IERC20(address(asset)),
+            "Spore USDC Vault",
+            "spvUSDC",
             twabController,
-            yieldVault,
+            IERC4626(address(yieldVaultMintRate)),
             _claimer,
             _yieldFeeRecipient,
             0,
             _owner
         );
-        console.log("Vault deployed at: ", address(vault));
-
-        vm.stopBroadcast();
     }
 
-    function configureChain() internal {
-        if (block.chainid == 80001) {
-            // mumbai
-            UNDERLYING_ASSET_ADDRESS = IERC20(
-                0x52D800ca262522580CeBAD275395ca6e7598C014
-            ); // Underlying asset listed in the Aave Protocol
+    function run() external {
+        vm.startBroadcast(deployerPrivateKey);
+        _deploydVault();
 
-            AToken = IERC20(0x4086fabeE92a080002eeBA1220B9025a27a40A49);
-            // yield vault(wrapped aave vault)
-            yieldVault = IERC4626(0xB270298208AFAA353f53F52F2011daa241A95e1C);
-
-            // twab controller
-            twabController = TwabController(
-                0xc83ad197808A948B29c8E94b3345508D296c7F7D
-            );
-        }
+        console.log("Vault deployed at: ", address(vault));
+        console.log("TwabController deployed at: ", address(twabController));
+        console.log("ERC20Mintable deployed at: ", address(asset));
+        console.log("TokenFaucet deployed at: ", address(faucet));
+        console.log("YieldVaultMintRate deployed at: ", address(yieldVaultMintRate));
+        vm.stopBroadcast();
     }
 }

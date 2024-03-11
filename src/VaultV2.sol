@@ -91,6 +91,8 @@ contract VaultV2 is IERC4626, ERC20Permit, Ownable, IVault {
     /// @notice Total yield fee shares available. Can be minted to `_yieldFeeRecipient` by calling `mintYieldFee`.
     uint256 private _yieldFeeShares;
 
+    SD59x18 private _oddsRate = sd(0.5e18);
+
     /// @notice Maps user addresses to hooks that they want to execute when prizes are won.
     mapping(address => VaultHooks) internal _hooks;
 
@@ -500,6 +502,7 @@ contract VaultV2 is IERC4626, ERC20Permit, Ownable, IVault {
 
         draws.push(draw);
         drawIdToDraw[currentDrawId] = draw;
+        emit NewDrawCreated(currentDrawId, drawStartTime, drawEndTime);
     }
 
     /**
@@ -522,6 +525,7 @@ contract VaultV2 is IERC4626, ERC20Permit, Ownable, IVault {
         }
         Team[] memory teams = abi.decode(_data, (Team[]));
         Draw storage draw = drawIdToDraw[drawId];
+
         draw.availableYieldAtEnd = _availableYieldBalance();
 
         uint256 vaultTwabTotalSupply =
@@ -716,6 +720,10 @@ contract VaultV2 is IERC4626, ERC20Permit, Ownable, IVault {
         return drawIdToWinningTeams[drawId];
     }
 
+    function setOddsRate(SD59x18 oddsRate) external onlyOwner {
+        _oddsRate = oddsRate;
+    }
+
     /**
      * @notice Calculate the team odds that will be used to determine the winning team.
      * @dev Calculate the odds for each team based on the teamTwab and the total supply of the vault.
@@ -734,10 +742,17 @@ contract VaultV2 is IERC4626, ERC20Permit, Ownable, IVault {
 
         for (uint256 i = 0; i < teams.length; i++) {
             uint256 teamTwab = _calculateTeamTwabBetween(teams[i].teamMembers, drawId);
+            SD59x18 convertedTeamPoints = convert(int256(teams[i].teamPoints));
             SD59x18 convertedTeamWab = convert(int256(teamTwab));
-            SD59x18 teamOdds = sd(1e18) - (convertedTeamWab / convertedTotalSupply);
+            // SD59x18 teamOdds = sd(1e18) -
+            //     (convertedTeamWab / convertedTotalSupply);
 
-            odds[i] = teamOdds;
+            // 0 < _oddsRate < 1
+
+            SD59x18 param1 = (_oddsRate * convertedTeamWab) / convertedTotalSupply;
+            SD59x18 param2 = (sd(1e18) - _oddsRate) * convertedTeamPoints;
+
+            odds[i] = param1 + param2;
         }
 
         return odds;
@@ -817,12 +832,12 @@ contract VaultV2 is IERC4626, ERC20Permit, Ownable, IVault {
      * @param claimer_ Address of the claimer
      * @return address New claimer address
      */
-    // function setClaimer(address claimer_) external onlyOwner returns (address) {
-    //     _setClaimer(claimer_);
+    function setClaimer(address claimer_) external onlyOwner returns (address) {
+        _setClaimer(claimer_);
 
-    //     emit ClaimerSet(claimer_);
-    //     return claimer_;
-    // }
+        emit ClaimerSet(claimer_);
+        return claimer_;
+    }
 
     /**
      * @notice Sets the hooks for a winner.
