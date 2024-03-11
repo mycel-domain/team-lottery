@@ -20,19 +20,16 @@ contract DeployVault is Script {
     address private _owner = 0x06aa005386F53Ba7b980c61e0D067CaBc7602a62;
 
     VaultV2 vault;
-    IERC4626 yieldVault;
-    IERC20 UNDERLYING_ASSET_ADDRESS;
-    IERC20 AToken;
     TwabController twabController = TwabController(0x845a658444e7b344B0c336E54D46F59bd323c65e);
-    ERC20Mintable public asset;
-    TokenFaucet public faucet;
-    YieldVaultMintRate public yieldVaultMintRate;
+    ERC20Mintable public asset = ERC20Mintable(0x80Bf46c2E683251f0fecAfC39F636494d4623c80);
+    TokenFaucet public faucet = TokenFaucet(0x23c4b10FF712CAaf7DA6A9c9eeDFa7C7739b7802);
+    YieldVaultMintRate public yieldVaultMintRate = YieldVaultMintRate(0x800Ae5c3853FeA6d3f82131285dD80D6C65494d6);
 
     function _deploydVault() internal {
         // twabController = new TwabController(3600, uint32(block.timestamp));
-        asset = new ERC20Mintable("USDC", "USDC", 6, _owner);
-        faucet = new TokenFaucet();
-        yieldVaultMintRate = new YieldVaultMintRate(asset, "Spore USDC Yield Vault", "syvUSDC", _owner);
+        // asset = new ERC20Mintable("USDC", "USDC", 6, _owner);
+        // faucet = new TokenFaucet();
+        // yieldVaultMintRate = new YieldVaultMintRate(asset, "Spore USDC Yield Vault", "syvUSDC", _owner);
 
         vault = new VaultV2(
             IERC20(address(asset)),
