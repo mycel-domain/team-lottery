@@ -6,17 +6,13 @@ import "forge-std/Test.sol";
 import "forge-std/console.sol";
 
 import {TwabController} from "pt-v5-twab-controller/TwabController.sol";
-import {ERC20, IERC20, IERC20Metadata} from "openzeppelin-contracts/token/ERC20/ERC20.sol";
+import {IERC20} from "openzeppelin-contracts/token/ERC20/ERC20.sol";
 import {IERC4626} from "openzeppelin-contracts/interfaces/IERC4626.sol";
-import {SD59x18, sd, unwrap, convert} from "prb-math/SD59x18.sol";
-import {MerkleProof} from "openzeppelin-contracts/utils/cryptography/MerkleProof.sol";
 
 import "../src/VaultV2.sol";
 import "../src/testnet/ERC20Mintable.sol";
 import "../src/testnet/TokenFaucet.sol";
 import "../src/testnet/YieldVaultMintRate.sol";
-import "./interfaces/IWETH.sol";
-import "./interfaces/IFaucet.sol";
 
 contract VaultTest is Test {
     address _claimer = makeAddr("claimer");
@@ -31,22 +27,12 @@ contract VaultTest is Test {
     address public user5 = makeAddr("user5");
     uint256 public constant ONE_YEAR_IN_SECONDS = 31557600;
 
-    bytes32 public root = 0xb2e75e0d42dc18d06e0a2f5b5ffc8da9a930eb8e674c5d63070384e1084f8763;
-    bytes32[] public leafs;
-    bytes32[] public l2;
-
     VaultV2 public vault;
     TwabController public twabController;
     ERC20Mintable public asset;
     TokenFaucet public faucet;
     YieldVaultMintRate public yieldVaultMintRate;
     VaultV2.Team[] public teams;
-
-    struct Value {
-        uint256 index;
-        address recipient;
-        uint256 amount;
-    }
 
     event PrizeDistributed(uint24 indexed drawId, address indexed recipient, uint256 amount);
 
@@ -321,6 +307,18 @@ contract VaultTest is Test {
         vm.stopPrank();
     }
 
+    function testRevertCallerNotClaimer() public {
+        _startDrawPeriod();
+        _depositMultiUser();
+        vm.warp(vault.getDraw(1).drawEndTime);
+        _yield(10 ether);
+        vm.startPrank(_owner);
+        _createTeams();
+        vm.expectRevert(abi.encodeWithSelector(CallerNotClaimer.selector, _owner, _claimer));
+        vault.finalizeDraw(1, 10, abi.encode(teams));
+        vm.stopPrank();
+    }
+
     /* ============ internal functions ============ */
 
     function _deployVaultV2() internal returns (VaultV2) {
@@ -383,24 +381,6 @@ contract VaultTest is Test {
 
     function _faucet(address account) internal prankception(account) {
         faucet.drip(IERC20(address(asset)));
-    }
-
-    function _genareteMerkleRoot(address[] memory prizeRecipients, uint256[] memory prizeAmounts) internal {
-        Value[] memory values = new Value[](prizeRecipients.length);
-
-        for (uint256 i = 0; i < prizeRecipients.length; i++) {
-            values[i] = Value({index: i, recipient: prizeRecipients[i], amount: prizeAmounts[i]});
-        }
-        for (uint256 i = 0; i < values.length; i++) {
-            leafs.push(
-                keccak256(bytes.concat(keccak256(abi.encode(values[i].index, values[i].recipient, values[i].amount))))
-            );
-        }
-
-        for (uint256 i = 0; i < leafs.length; i += 2) {
-            l2.push(keccak256(abi.encodePacked(leafs[i], leafs[i + 1])));
-        }
-        root = keccak256(abi.encodePacked(l2[0], l2[1]));
     }
 
     function _createTeams() internal {

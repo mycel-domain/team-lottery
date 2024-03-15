@@ -5,7 +5,9 @@
   "scripts": {
     "build": "forge build",
     "compile": "forge compile",
+		"clean" : "forge cache clean all",
     "test": "forge test --no-match-contract Fork",
+		"test:vault-op": "forge fmt && forge test --fork-url $OP_RPC_URL --match-path test/fork/MainnetVault.t.sol",
 		"coverage": "forge coverage --ir-minimum",
     "test:vault": "forge fmt && forge test --match-path test/Vault.t.sol",
     "deploy:vault-testnet": "forge script script/Vault.s.sol:DeployVault --rpc-url $OP_SEPOLIA_URL --broadcast -vvvv --etherscan-api-key $ETHERSCAN_OPTIMISM_API_KEY --verify",

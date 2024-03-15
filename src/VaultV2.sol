@@ -747,12 +747,12 @@ contract VaultV2 is IERC4626, ERC20Permit, Ownable {
     /* ============ Draw Functions ============ */
 
     /**
-     * @notice Start a new draw. onlyOwner can call this function.
+     * @notice Start a new draw. onlyClaimer can call this function.
      * @dev Will revert if the drawStartTime is in the past.
      * drawEndTime should be: drawStartTime + 7 days
      * @param drawStartTime Start time of the draw
      */
-    function startDrawPeriod(uint256 drawStartTime) external onlyOwner {
+    function startDrawPeriod(uint256 drawStartTime) external onlyClaimer {
         uint256 drawEndTime = drawStartTime + 7 days;
         if (block.timestamp > drawStartTime) {
             revert InvalidDrawPeriod(block.timestamp, drawStartTime);
@@ -773,13 +773,13 @@ contract VaultV2 is IERC4626, ERC20Permit, Ownable {
     }
 
     /**
-     * @notice Finalize the draw and calculate the winning team. onlyOwner can call this function.
+     * @notice Finalize the draw and calculate the winning team. onlyClaimer can call this function.
      * @dev calculate the winning team based on the encoded Team[] input and pseudo random number
      * @param drawId id of the draw
      * @param _winningRandomNumber The winning random number for the draw
      * @param _data Team[] -> (uint8 teamId, uint256 teamTwab, uint256 teamPoints, address[] teamMembers)
      */
-    function finalizeDraw(uint24 drawId, uint256 _winningRandomNumber, bytes calldata _data) external onlyOwner {
+    function finalizeDraw(uint24 drawId, uint256 _winningRandomNumber, bytes calldata _data) external onlyClaimer {
         if (block.timestamp < drawIdToDraw[drawId].drawEndTime) {
             revert InvalidDrawPeriod(block.timestamp, drawIdToDraw[drawId].drawEndTime);
         }
@@ -835,11 +835,11 @@ contract VaultV2 is IERC4626, ERC20Permit, Ownable {
     }
 
     /**
-     * @notice set Distributions for each winning recipients. onlyOwner can call this function.
+     * @notice set Distributions for each winning recipients. onlyClaimer can call this function.
      * @dev Will revert if the distribution has already set or the draw is not finalized
      * @param drawId id of the draw
      */
-    function distributePrizes(uint24 drawId) external onlyOwner {
+    function distributePrizes(uint24 drawId) external onlyClaimer {
         if (drawPrizeSet[drawId]) {
             revert PrizeAlreadySet(drawId);
         }
