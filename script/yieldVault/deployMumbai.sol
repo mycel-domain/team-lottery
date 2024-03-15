@@ -9,15 +9,9 @@ import {AaveV3ERC4626Factory} from "yield-daddy/aave-v3/AaveV3ERC4626Factory.sol
 contract DeployScript is Script {
     function run() public returns (AaveV3ERC4626Factory deployed) {
         uint256 deployerPrivateKey = uint256(vm.envBytes32("PRIVATE_KEY"));
-        CREATE3Factory create3 = CREATE3Factory(
-            0x4dE723974c4f95aE0c7fF26f334D3edccAa83A68
-        );
-        address rewardsController = vm.envAddress(
-            "AAVE_V3_REWARDS_CONTROLLER_POLYGON"
-        );
-        address rewardRecipient = vm.envAddress(
-            "AAVE_V3_REWARDS_RECIPIENT_POLYGON"
-        );
+        CREATE3Factory create3 = CREATE3Factory(0x4dE723974c4f95aE0c7fF26f334D3edccAa83A68);
+        address rewardsController = vm.envAddress("AAVE_V3_REWARDS_CONTROLLER_POLYGON");
+        address rewardRecipient = vm.envAddress("AAVE_V3_REWARDS_RECIPIENT_POLYGON");
         address lendingPool = vm.envAddress("AAVE_V3_LENDING_POOL_POLYGON");
 
         vm.startBroadcast(deployerPrivateKey);
@@ -26,8 +20,7 @@ contract DeployScript is Script {
             create3.deploy(
                 keccak256("AaveV3ERC4626Factory"),
                 bytes.concat(
-                    type(AaveV3ERC4626Factory).creationCode,
-                    abi.encode(lendingPool, rewardRecipient, rewardsController)
+                    type(AaveV3ERC4626Factory).creationCode, abi.encode(lendingPool, rewardRecipient, rewardsController)
                 )
             )
         );

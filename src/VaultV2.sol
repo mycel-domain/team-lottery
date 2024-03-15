@@ -2,7 +2,6 @@
 pragma solidity ^0.8.20;
 
 import {ERC20, IERC20, IERC20Metadata} from "openzeppelin-contracts/token/ERC20/ERC20.sol";
-import {MerkleProof} from "openzeppelin-contracts/utils/cryptography/MerkleProof.sol";
 import {IERC4626} from "openzeppelin-contracts/interfaces/IERC4626.sol";
 import {ERC20Permit, IERC20Permit} from "openzeppelin-contracts/token/ERC20/extensions/ERC20Permit.sol";
 import {SafeERC20} from "openzeppelin-contracts/token/ERC20/utils/SafeERC20.sol";
@@ -14,10 +13,200 @@ import {VaultHooks} from "pt-v5-vault/interfaces/IVaultHooks.sol";
 import {SD59x18, sd, unwrap, convert} from "prb-math/SD59x18.sol";
 
 import {DrawCalculation} from "./libraries/Draw.sol";
-import {IVault} from "./interface/IVault.sol";
+
+/* ============ Errors ============ */
+
+/// @notice Emitted when the Yield Vault is set to the zero address.
+error YieldVaultZeroAddress();
+
+/// @notice Emitted when the Prize Pool is set to the zero address.
+error PrizePoolZeroAddress();
+
+/// @notice Emitted when the Owner is set to the zero address.
+error OwnerZeroAddress();
+
+/**
+ * @notice Emitted when the underlying asset passed to the constructor is different from the YieldVault one.
+ * @param asset Address of the underlying asset passed to the constructor
+ * @param yieldVaultAsset Address of the YieldVault underlying asset
+ */
+error UnderlyingAssetMismatch(address asset, address yieldVaultAsset);
+
+/**
+ * @notice Emitted when the amount being deposited for the receiver is greater than the max amount allowed.
+ * @param receiver The receiver of the deposit
+ * @param amount The amount to deposit
+ * @param max The max deposit amount allowed
+ */
+error DepositMoreThanMax(address receiver, uint256 amount, uint256 max);
+
+/**
+ * @notice Emitted when the amount being minted for the receiver is greater than the max amount allowed.
+ * @param receiver The receiver of the mint
+ * @param amount The amount to mint
+ * @param max The max mint amount allowed
+ */
+error MintMoreThanMax(address receiver, uint256 amount, uint256 max);
+
+/**
+ * @notice Emitted when the amount being withdrawn for the owner is greater than the max amount allowed.
+ * @param owner The owner of the assets
+ * @param amount The amount to withdraw
+ * @param max The max withdrawable amount
+ */
+error WithdrawMoreThanMax(address owner, uint256 amount, uint256 max);
+
+/**
+ * @notice Emitted when the amount being redeemed for owner is greater than the max allowed amount.
+ * @param owner The owner of the assets
+ * @param amount The amount to redeem
+ * @param max The max redeemable amount
+ */
+error RedeemMoreThanMax(address owner, uint256 amount, uint256 max);
+
+/// @notice Emitted when `_deposit` is called but no shares are minted back to the receiver.
+error MintZeroShares();
+
+/// @notice Emitted when `_withdraw` is called but no assets are being withdrawn.
+error WithdrawZeroAssets();
+
+/**
+ * @notice Emitted when `_withdraw` is called but the amount of assets withdrawn from the YieldVault
+ *         is lower than the amount of assets requested by the caller.
+ * @param requestedAssets The amount of assets requested
+ * @param withdrawnAssets The amount of assets withdrawn from the YieldVault
+ */
+error WithdrawAssetsLTRequested(uint256 requestedAssets, uint256 withdrawnAssets);
+
+/// @notice Emitted when `sweep` is called but no underlying assets are currently held by the Vault.
+error SweepZeroAssets();
+
+/**
+ * @notice Emitted during the liquidation process when the caller is not the liquidation pair contract.
+ * @param caller The caller address
+ * @param liquidationPair The LP address
+ */
+error CallerNotLP(address caller, address liquidationPair);
+
+/**
+ * @notice Emitted during the liquidation process when the token in is not the prize token.
+ * @param tokenIn The provided tokenIn address
+ * @param prizeToken The prize token address
+ */
+error LiquidationTokenInNotPrizeToken(address tokenIn, address prizeToken);
+
+/**
+ * @notice Emitted during the liquidation process when the token out is not the vault share token.
+ * @param tokenOut The provided tokenOut address
+ * @param vaultShare The vault share token address
+ */
+error LiquidationTokenOutNotVaultShare(address tokenOut, address vaultShare);
+
+/// @notice Emitted during the liquidation process when the liquidation amount out is zero.
+error LiquidationAmountOutZero();
+
+/**
+ * @notice Emitted during the liquidation process if the amount out is greater than the available yield.
+ * @param amountOut The amount out
+ * @param availableYield The available yield
+ */
+error LiquidationAmountOutGTYield(uint256 amountOut, uint256 availableYield);
+
+/// @notice Emitted when the Vault is under-collateralized.
+error VaultUndercollateralized();
+
+/**
+ * @notice Emitted when the target token is not supported for a given token address.
+ * @param token The unsupported token address
+ */
+error TargetTokenNotSupported(address token);
+
+/// @notice Emitted when the Claimer is set to the zero address.
+error ClaimerZeroAddress();
+
+/**
+ * @notice Emitted when the caller is not the prize claimer.
+ * @param caller The caller address
+ * @param claimer The claimer address
+ */
+error CallerNotClaimer(address caller, address claimer);
+
+/**
+ * @notice Emitted when the minted yield exceeds the yield fee shares available.
+ * @param shares The amount of yield shares to mint
+ * @param yieldFeeShares The accrued yield fee shares available
+ */
+error YieldFeeGTAvailableShares(uint256 shares, uint256 yieldFeeShares);
+
+/**
+ * @notice Emitted when the minted yield exceeds the amount of available yield in the YieldVault.
+ * @param shares The amount of yield shares to mint
+ * @param availableYield The amount of yield available
+ */
+error YieldFeeGTAvailableYield(uint256 shares, uint256 availableYield);
+
+/// @notice Emitted when the Liquidation Pair being set is the zero address.
+error LPZeroAddress();
+
+/**
+ * @notice Emitted when the yield fee percentage being set is greater than or equal to 1.
+ * @param yieldFeePercentage The yield fee percentage in integer format
+ * @param maxYieldFeePercentage The max yield fee percentage in integer format (this value is equal to 1 in decimal format)
+ */
+error YieldFeePercentageGtePrecision(uint256 yieldFeePercentage, uint256 maxYieldFeePercentage);
+
+/**
+ * @notice Emitted when the BeforeClaim prize hook fails
+ * @param reason The revert reason that was thrown
+ */
+error BeforeClaimPrizeFailed(bytes reason);
+
+/**
+ * @notice Emitted when the AfterClaim prize hook fails
+ * @param reason The revert reason that was thrown
+ */
+error AfterClaimPrizeFailed(bytes reason);
+
+/// @notice Emitted when a prize is claimed for the zero address.
+error ClaimRecipientZeroAddress();
+
+/**
+ * @notice Emitted when the caller of a permit function is not the owner of the assets being permitted.
+ * @param caller The address of the caller
+ * @param owner The address of the owner
+ */
+error PermitCallerNotOwner(address caller, address owner);
+
+/**
+ * @notice Emitted when a permit call on the underlying asset failed to set the spending allowance.
+ * @dev This is likely thrown when the underlying asset does not support permit, but has a fallback function.
+ * @param owner The owner of the assets
+ * @param spender The spender of the assets
+ * @param amount The amount of assets permitted
+ * @param allowance The allowance after the permit was called
+ */
+error PermitAllowanceNotSet(address owner, address spender, uint256 amount, uint256 allowance);
+
+error InvalidDrawPeriod(uint256 timestamp, uint256 drawPeriod);
+
+error DrawAlreadyFinalized(uint24 drawId);
+
+error DrawNotFinalized(uint24 drawId);
+
+error WinningTeamNotFound();
+
+error InvalidRecipient(address recipient);
+
+error InvalidAmount();
+
+error InvalidWithdrawal();
+
+error RandomNumberIsZero();
+
+error PrizeAlreadySet(uint24 drawId);
 
 // ref: https://github.com/GenerationSoftware/pt-v5-vault/blob/97f5fd14e9d25c704b9d7da87c4d9d996b7dec41/src/Vault.sol
-contract VaultV2 is IERC4626, ERC20Permit, Ownable, IVault {
+contract VaultV2 is IERC4626, ERC20Permit, Ownable {
     using Math for uint256;
     using SafeCast for uint256;
     using SafeERC20 for IERC20;
@@ -28,7 +217,6 @@ contract VaultV2 is IERC4626, ERC20Permit, Ownable, IVault {
         uint256 drawEndTime;
         uint256 availableYieldAtStart;
         uint256 availableYieldAtEnd;
-        bool isFinalized;
     }
 
     struct Team {
@@ -38,12 +226,89 @@ contract VaultV2 is IERC4626, ERC20Permit, Ownable, IVault {
         address[] teamMembers;
     }
 
-    struct Distribution {
-        address recipient;
-        uint256 index;
-        uint256 amount;
-        bytes32[] merkleProof;
-    }
+    /* ============ Events ============ */
+
+    /**
+     * @notice Emitted when a new Vault has been deployed.
+     * @param asset Address of the underlying asset used by the vault
+     * @param name Name of the ERC20 share minted by the vault
+     * @param symbol Symbol of the ERC20 share minted by the vault
+     * @param twabController Address of the TwabController used to keep track of balances
+     * @param yieldVault Address of the ERC4626 vault in which assets are deposited to generate yield
+     * @param claimer Address of the claimer
+     * @param yieldFeeRecipient Address of the yield fee recipient
+     * @param yieldFeePercentage Yield fee percentage in integer format with 1e9 precision (50% would be 5e8)
+     * @param owner Address of the contract owner
+     */
+    event NewVault(
+        IERC20 indexed asset,
+        string name,
+        string symbol,
+        TwabController twabController,
+        IERC4626 indexed yieldVault,
+        address claimer,
+        address yieldFeeRecipient,
+        uint256 yieldFeePercentage,
+        address owner
+    );
+
+    /**
+     * @notice Emitted when an account sets new hooks
+     * @param account The account whose hooks are being configured
+     * @param hooks The hooks being set
+     */
+    event SetHooks(address indexed account, VaultHooks indexed hooks);
+
+    /**
+     * @notice Emitted when yield fee is minted to the yield recipient.
+     * @param caller Address that called the function
+     * @param recipient Address receiving the Vault shares
+     * @param shares Amount of shares minted to `recipient`
+     */
+    event MintYieldFee(address indexed caller, address indexed recipient, uint256 shares);
+
+    /**
+     * @notice Emitted when a new yield fee recipient has been set.
+     * @param yieldFeeRecipient Address of the new yield fee recipient
+     */
+    event YieldFeeRecipientSet(address indexed yieldFeeRecipient);
+
+    /**
+     * @notice Emitted when a new yield fee percentage has been set.
+     * @param yieldFeePercentage New yield fee percentage
+     */
+    event YieldFeePercentageSet(uint256 yieldFeePercentage);
+
+    /**
+     * @notice Emitted when a user sponsors the Vault.
+     * @param caller Address that called the function
+     * @param assets Amount of assets deposited into the Vault
+     * @param shares Amount of shares minted to the caller address
+     */
+    event Sponsor(address indexed caller, uint256 assets, uint256 shares);
+
+    /**
+     * @notice Emitted when a user sweeps assets held by the Vault into the YieldVault.
+     * @param caller Address that called the function
+     * @param assets Amount of assets sweeped into the YieldVault
+     */
+    event Sweep(address indexed caller, uint256 assets);
+
+    event ClaimerSet(address indexed claimer);
+
+    /**
+     * @notice Emitted when a user sweeps assets held by the Vault into the YieldVault.
+     * @param drawId The draw id
+     * @param recipient The recipient of the prize
+     * @param amount The amount of the prize
+     */
+    event PrizeDistributed(uint24 indexed drawId, address indexed recipient, uint256 amount);
+
+    event DrawFinalized(uint24 indexed drawId, uint8[] winningTeams, uint256 winningRandomNumber, uint256 prizeSize);
+
+    event NewDrawCreated(uint24 indexed drawId, uint256 drawStartPeriod, uint256 drawEndPeriod);
+
+    event PrizeClaimed(address indexed recipient, uint256 indexed amount);
 
     /* ============ Variables ============ */
 
@@ -105,8 +370,11 @@ contract VaultV2 is IERC4626, ERC20Permit, Ownable, IVault {
 
     mapping(uint24 => Draw) public drawIdToDraw;
 
-    // mapping drawId to merkle root
-    mapping(uint24 => bytes32) public drawIdToMerkleRoot;
+    mapping(address => uint256) public _claimablePrize;
+
+    mapping(uint24 => bool) public drawIsFinalized;
+
+    mapping(uint24 => bool) public drawPrizeSet;
     /* ============ Modifiers ============ */
 
     /// @notice Modifier reverting if the Vault is under-collateralized.
@@ -137,11 +405,11 @@ contract VaultV2 is IERC4626, ERC20Permit, Ownable, IVault {
     }
 
     /**
-     * @notice Requires the caller to be the liquidation pair.
+     * @notice Requires the caller has amounts to claim.
      */
-    modifier onlyLiquidationPair() {
-        if (msg.sender != _liquidationPair) {
-            revert CallerNotLP(msg.sender, _liquidationPair);
+    modifier onlyClaimableUser(address user) {
+        if (_claimablePrize[user] == 0) {
+            revert InvalidRecipient(user);
         }
         _;
     }
@@ -479,12 +747,12 @@ contract VaultV2 is IERC4626, ERC20Permit, Ownable, IVault {
     /* ============ Draw Functions ============ */
 
     /**
-     * @notice Start a new draw. onlyOwner can call this function.
+     * @notice Start a new draw. onlyClaimer can call this function.
      * @dev Will revert if the drawStartTime is in the past.
      * drawEndTime should be: drawStartTime + 7 days
      * @param drawStartTime Start time of the draw
      */
-    function startDrawPeriod(uint256 drawStartTime) external onlyOwner {
+    function startDrawPeriod(uint256 drawStartTime) external onlyClaimer {
         uint256 drawEndTime = drawStartTime + 7 days;
         if (block.timestamp > drawStartTime) {
             revert InvalidDrawPeriod(block.timestamp, drawStartTime);
@@ -496,8 +764,7 @@ contract VaultV2 is IERC4626, ERC20Permit, Ownable, IVault {
             drawStartTime: drawStartTime,
             drawEndTime: drawEndTime,
             availableYieldAtStart: _availableYieldBalance(),
-            availableYieldAtEnd: 0,
-            isFinalized: false
+            availableYieldAtEnd: 0
         });
 
         draws.push(draw);
@@ -506,18 +773,18 @@ contract VaultV2 is IERC4626, ERC20Permit, Ownable, IVault {
     }
 
     /**
-     * @notice Finalize the draw and calculate the winning team. onlyOwner can call this function.
+     * @notice Finalize the draw and calculate the winning team. onlyClaimer can call this function.
      * @dev calculate the winning team based on the encoded Team[] input and pseudo random number
      * @param drawId id of the draw
      * @param _winningRandomNumber The winning random number for the draw
      * @param _data Team[] -> (uint8 teamId, uint256 teamTwab, uint256 teamPoints, address[] teamMembers)
      */
-    function finalizeDraw(uint24 drawId, uint256 _winningRandomNumber, bytes calldata _data) external onlyOwner {
+    function finalizeDraw(uint24 drawId, uint256 _winningRandomNumber, bytes calldata _data) external onlyClaimer {
         if (block.timestamp < drawIdToDraw[drawId].drawEndTime) {
             revert InvalidDrawPeriod(block.timestamp, drawIdToDraw[drawId].drawEndTime);
         }
-        if (drawIdToDraw[drawId].isFinalized) {
-            revert AlreadyFinalized();
+        if (drawIsFinalized[drawId]) {
+            revert DrawAlreadyFinalized(drawId);
         }
 
         if (_winningRandomNumber == 0) {
@@ -527,6 +794,8 @@ contract VaultV2 is IERC4626, ERC20Permit, Ownable, IVault {
         Draw storage draw = drawIdToDraw[drawId];
 
         draw.availableYieldAtEnd = _availableYieldBalance();
+
+        uint256 prize = draw.availableYieldAtEnd - draw.availableYieldAtStart;
 
         uint256 vaultTwabTotalSupply =
             _twabController.getTotalSupplyTwabBetween(address(this), draw.drawStartTime, draw.drawEndTime);
@@ -557,81 +826,72 @@ contract VaultV2 is IERC4626, ERC20Permit, Ownable, IVault {
         }
 
         _finalizeTeamPrize(drawId);
-        draw.isFinalized = true;
+        drawIsFinalized[drawId] = true;
         currentDrawId++;
 
-        drawIdToPrize[drawId] = _availableYieldBalance() - draw.availableYieldAtStart;
+        drawIdToPrize[drawId] = prize;
 
-        emit DrawFinalized(drawId, drawIdToWinningTeamIds[drawId], _winningRandomNumber);
+        emit DrawFinalized(drawId, drawIdToWinningTeamIds[drawId], _winningRandomNumber, prize);
     }
 
     /**
-     * @notice Distribute the prize to the winning team members. onlyOwner can call this function.
-     * Owner must call setDistribution before calling distributePrizes
-     * because distributionPrize check whether the recipient and amount is valid or not based on the merkle proof
-     * @dev Will revert if the distribution has not been set or the recipient is invalid.
-     * validate the merkle proof and distribute the prize to the recipient
-     * finalizeDraw -> getDistributions -> setDistribution -> distributePrizes
+     * @notice set Distributions for each winning recipients. onlyClaimer can call this function.
+     * @dev Will revert if the distribution has already set or the draw is not finalized
      * @param drawId id of the draw
-     * @param _data Distribution[] -> (address recipient, uint256 index, uint256 amount, bytes32[] merkleProof)
      */
-    function distributePrizes(uint24 drawId, bytes memory _data) external onlyOwner {
-        if (!_isDistributionSet(drawId)) {
-            revert DistributionNotSet(drawId);
+    function distributePrizes(uint24 drawId) external onlyClaimer {
+        if (drawPrizeSet[drawId]) {
+            revert PrizeAlreadySet(drawId);
+        }
+        if (!drawIsFinalized[drawId]) {
+            revert DrawNotFinalized(drawId);
         }
 
-        uint256 prize = drawIdToPrize[drawId];
-        if (_yieldVault.maxWithdraw(address(this)) < prize) {
+        (address[] memory recipients, uint256[] memory prizes) = _getDistributions(drawId);
+        for (uint256 i = 0; i < recipients.length; i++) {
+            address recipient = recipients[i];
+            uint256 amount = prizes[i];
+            if (_claimablePrize[recipient] == 0) {
+                _claimablePrize[recipient] = amount;
+                emit PrizeDistributed(drawId, recipient, amount);
+            } else {
+                _claimablePrize[recipient] += amount;
+                emit PrizeDistributed(drawId, recipient, amount);
+            }
+        }
+        drawPrizeSet[drawId] = true;
+    }
+
+    /**
+     * @notice claim prize for the user. onlyClaimableUser can call this function.
+     * @dev Will revert if the caller has no claimable prize
+     * @dev Will revert if the amount is greater than the claimable prize
+     * @dev Will revert if the amount is greater than the max withdrawal amount
+     * @param amount amount of the prize
+     */
+    function claimPrize(uint256 amount) external onlyClaimableUser(msg.sender) {
+        uint256 claimablePrize = _claimablePrize[msg.sender];
+
+        if (amount > claimablePrize) {
             revert InvalidAmount();
         }
 
-        // only withdraw yield
-        _yieldVault.withdraw(prize, address(this), address(this));
-
-        Distribution[] memory distributions = abi.decode(_data, (Distribution[]));
-
-        for (uint256 i = 0; i < distributions.length; i++) {
-            Distribution memory distribution = distributions[i];
-
-            uint256 index = distribution.index;
-            address recipient = distribution.recipient;
-            uint256 amount = distribution.amount;
-            bytes32[] memory merkleProof = distribution.merkleProof;
-
-            // Validate the distribution and transfer the funds to the recipient, otherwise revert if not valid
-            if (_validateDistribution(drawId, index, recipient, amount, merkleProof)) {
-                // TODO: call the function that tracks whether the distribution has done or not for each recipient
-                // revert if the distribution has been done
-                // check the bitmap based on index
-
-                // Transfer the amount to the recipient
-                _asset.safeTransfer(distribution.recipient, distribution.amount);
-                // Emit that the prize have been distributed to the recipient
-                emit PrizeDistributed(drawId, recipient, amount);
-            } else {
-                revert InvalidRecipient(distribution.recipient);
-            }
+        if (amount > _yieldVault.maxWithdraw(address(this))) {
+            revert InvalidWithdrawal();
         }
-    }
 
-    /**
-     * @notice Set the merkle root of the distribution. onlyOwner can call this function.
-     * @dev Owner must call setDistribution before calling distributePrizes.
-     * merkleRoot is the root of the merkle tree that contains [index, recipient, amount]
-     * @param drawId id of the draw
-     * @param merkleRoot merkle root of the distribution corresponding to the drawId
-     */
-    function setDistribution(uint24 drawId, bytes32 merkleRoot) external onlyOwner {
-        drawIdToMerkleRoot[drawId] = merkleRoot;
-        emit DistributionSet(drawId, merkleRoot);
-    }
+        _claimablePrize[msg.sender] -= amount;
 
-    function _isDistributionSet(uint24 drawId) internal view returns (bool) {
-        return drawIdToMerkleRoot[drawId] != 0;
+        _yieldVault.withdraw(amount, msg.sender, address(this));
+        emit PrizeClaimed(msg.sender, amount);
     }
 
     // getDistributions for each winning team
     function getDistributions(uint24 drawId) external view returns (address[] memory, uint256[] memory) {
+        return _getDistributions(drawId);
+    }
+
+    function _getDistributions(uint24 drawId) private view returns (address[] memory, uint256[] memory) {
         Team[] memory winningTeams = drawIdToWinningTeams[drawId];
         Draw memory draw = drawIdToDraw[drawId];
 
@@ -664,41 +924,6 @@ contract VaultV2 is IERC4626, ERC20Permit, Ownable, IVault {
         return (recipients, amounts);
     }
 
-    /**
-     * @notice Validate the recipient is valid to recieve the prize.
-     * @dev Validate the merkle proof of the recipient and the amount.
-     * revert if the merkle proof is not valid corresponding to the merkle root
-     * that has been set by the owner.
-     * @param drawId id of the draw
-     * @param index index of the recipient
-     * @param recipient address of the recipient
-     * @param amount amount of the recipient
-     * @param merkleProof merkle proof of the recipient
-     * @return bool true if the MerkleProof.verify is valid
-     */
-    function _validateDistribution(
-        uint24 drawId,
-        uint256 index,
-        address recipient,
-        uint256 amount,
-        bytes32[] memory merkleProof
-    ) internal view returns (bool) {
-        // TODO: check if the distribution has been done or not
-
-        bytes32 node = keccak256(bytes.concat(keccak256(abi.encode(index, recipient, amount))));
-
-        // Generate the node that will be verified in the 'merkleRoot'
-        bytes32 merkleRoot = drawIdToMerkleRoot[drawId];
-
-        // If the node is not verified in the 'merkleRoot' this will return 'false'
-        if (!MerkleProof.verify(merkleProof, merkleRoot, node)) {
-            return false;
-        }
-
-        // Return 'true', the distribution is valid at this point
-        return true;
-    }
-
     // calculate total twab of winning teams
     function _winningTwabTotal(uint24 drawId) internal view returns (uint256 totalTwab) {
         Team[] memory winningTeams = drawIdToWinningTeams[drawId];
@@ -706,18 +931,6 @@ contract VaultV2 is IERC4626, ERC20Permit, Ownable, IVault {
             totalTwab += winningTeams[i].teamTwab;
         }
         return totalTwab;
-    }
-
-    function calculateTeamOdds(Team[] memory teams, uint24 drawId, uint256 vaultTwabTotalSupply)
-        external
-        view
-        returns (SD59x18[] memory)
-    {
-        return _calculateTeamOdds(teams, drawId, vaultTwabTotalSupply);
-    }
-
-    function getWinningTeams(uint24 drawId) external view returns (Team[] memory) {
-        return drawIdToWinningTeams[drawId];
     }
 
     function setOddsRate(SD59x18 oddsRate) external onlyOwner {
@@ -948,10 +1161,9 @@ contract VaultV2 is IERC4626, ERC20Permit, Ownable, IVault {
     //     return address(_prizePool);
     // }
 
-    // /// @inheritdoc IClaimable
-    // function claimer() external view returns (address) {
-    //     return _claimer;
-    // }
+    function claimer() external view returns (address) {
+        return _claimer;
+    }
 
     /**
      * @notice Gets the hooks for the given user.

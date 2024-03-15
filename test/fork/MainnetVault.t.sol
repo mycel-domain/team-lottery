@@ -6,237 +6,329 @@ import "forge-std/Test.sol";
 import "forge-std/console.sol";
 
 import {TwabController} from "pt-v5-twab-controller/TwabController.sol";
-import {ERC20, IERC20, IERC20Metadata} from "openzeppelin-contracts/token/ERC20/ERC20.sol";
+import {IERC20} from "openzeppelin-contracts/token/ERC20/ERC20.sol";
 import {IERC4626} from "openzeppelin-contracts/interfaces/IERC4626.sol";
-import {SD59x18, sd, unwrap, convert} from "prb-math/SD59x18.sol";
-import {VaultV2} from "../../src/VaultV2.sol";
-import {IWETH} from "../interfaces/IWETH.sol";
-import {IFaucet} from "../interfaces/IFaucet.sol";
+import "../../src/VaultV2.sol";
+import "../interfaces/IWETH.sol";
 
 contract ForkMainnetVault is Test {
-    address _claimer = 0x06aa005386F53Ba7b980c61e0D067CaBc7602a62;
-    address _yieldFeeRecipient = 0x06aa005386F53Ba7b980c61e0D067CaBc7602a62;
-    address _owner = 0x06aa005386F53Ba7b980c61e0D067CaBc7602a62;
+    address _claimer = makeAddr("claimer");
+    address _yieldFeeRecipient = makeAddr("yieldFeeRecipient");
+    address _owner = makeAddr("owner");
 
-    address m1 = address(5);
-    address m2 = address(2);
-    address m3 = address(3);
-    address m4 = address(4);
+    address public currentPrankee;
+    address public user1 = makeAddr("user1");
+    address public user2 = makeAddr("user2");
+    address public user3 = makeAddr("user3");
+    address public user4 = makeAddr("user4");
+    address public user5 = makeAddr("user5");
 
     IWETH public weth;
     IERC4626 public yieldVault;
-    IERC20 public AToken;
     TwabController public twabController;
+    VaultV2 public vault;
+    VaultV2.Team[] public teams;
+
+    event PrizeDistributed(uint24 indexed drawId, address indexed recipient, uint256 amount);
+
+    event DrawFinalized(uint24 indexed drawId, uint8[] winningTeams, uint256 winningRandomNumber, uint256 prizeSize);
+
+    event PrizeClaimed(address indexed recipient, uint256 indexed amount);
 
     function setUp() public {
         configureChain();
+        vm.deal(user1, 10 ether);
+        vm.deal(user2, 10 ether);
+        vm.deal(user3, 10 ether);
+        vm.deal(user4, 10 ether);
+        vm.deal(_claimer, 10 ether);
+        vm.deal(_owner, 10 ether);
+
+        vm.startPrank(_owner);
+        twabController = new TwabController(3600, uint32(block.timestamp));
+        vault = _deployVaultV2();
+        vm.stopPrank();
     }
 
-    function test_finalizeDraw() public {
-        VaultV2 vault = deployVaultV2();
+    function testClaimPrize() public {
+        _startDrawPeriod();
+        _depositMultiUser();
 
-        vm.startPrank(_owner);
-        vm.deal(address(this), 100 ether);
-        vault.startDrawPeriod(block.timestamp);
+        vm.warp(vault.getDraw(1).drawEndTime);
+
+        vm.startPrank(_claimer);
+        _createTeams();
+        vault.finalizeDraw(
+            1, 70333568669866340472331338725676123169611570254888405765691075355522696984357, abi.encode(teams)
+        );
+
+        vault.distributePrizes(1);
+        (address[] memory prizeRecipients, uint256[] memory prizeAmounts) = vault.getDistributions(1);
+
+        for (uint256 i = 0; i < prizeRecipients.length; i++) {
+            assertEq(vault._claimablePrize(prizeRecipients[i]), prizeAmounts[i]);
+            vm.expectEmit(true, true, false, true);
+            emit PrizeClaimed(prizeRecipients[i], prizeAmounts[i]);
+            _claimPrize(prizeRecipients[i], prizeAmounts[i]);
+            assertEq(vault._claimablePrize(prizeRecipients[i]), 0);
+        }
+
         vm.stopPrank();
+    }
 
-        depositETH(vault);
+    function testDistributePrize() public {
+        _startDrawPeriod();
+        _depositMultiUser();
 
-        vm.startPrank(_owner);
-        vm.warp(block.timestamp + 7 days + 3600);
-
-        address[] memory team1 = new address[](2);
-        team1[0] = m1;
-        team1[1] = m2;
-        address[] memory team2 = new address[](2);
-        team2[0] = m3;
-        team2[1] = m4;
-
-        VaultV2.Team[] memory teams = new VaultV2.Team[](2);
-
-        uint256 team1Twab = vault.calculateTeamTwabBetween(team1, 1);
-        uint256 team2Twab = vault.calculateTeamTwabBetween(team2, 1);
-
-        teams[0] = VaultV2.Team({
-            teamId: 1,
-            teamTwab: team1Twab,
-            teamPoints: 150,
-            // teamContributionFraction: TIER_ODDS_1_5,
-            teamMembers: team1
-        });
-
-        teams[1] = VaultV2.Team({
-            teamId: 2,
-            teamTwab: team2Twab,
-            teamPoints: 100,
-            // teamContributionFraction: TIER_ODDS_1_6,
-            teamMembers: team2
-        });
-
-        bytes32 merkleRoot = 0x7bb77316f26ea3988566a27acebe392e2c26f95134b9552dc31b01bd8e151fd2;
+        vm.warp(vault.getDraw(1).drawEndTime);
+        vm.startPrank(_claimer);
+        _createTeams();
         vault.finalizeDraw(
             1, 70333568669866340472331338725676123169611570254888405765691075355522696984357, abi.encode(teams)
         );
 
         (address[] memory prizeRecipients, uint256[] memory prizeAmounts) = vault.getDistributions(1);
 
-        vault.setDistribution(1, merkleRoot);
-        /**
-         * bytes32[] memory m1Proof = new bytes32[](2);
-         *     m1Proof[
-         *         0
-         *     ] = 0xcdf69a3fbe2fece0bfb7d11a4b19935a2000d94dfe45628438f0f51d96038e32;
-         *     m1Proof[
-         *         1
-         *     ] = 0xcd513ac65595a628994bb4adb3fea5f09212a334d42eb531c142b4c4153e42d7;
-         *
-         *     bytes32[] memory m2Proof = new bytes32[](2);
-         *     m2Proof[
-         *         0
-         *     ] = 0xd08c889a2b804c67887cd70e57ff036e6bc341281711f6587c117607d171d093;
-         *     m2Proof[
-         *         1
-         *     ] = 0xcef176f06c08cd4d427835200fd74838135532147a2b74b603fcb420e80fd07a;
-         *
-         *     bytes32[] memory m3Proof = new bytes32[](2);
-         *     m3Proof[
-         *         0
-         *     ] = 0xf8d15571a64548fa203ae0cb922ffbcc7cdcad943ff1486b7bdf772f9b266784;
-         *     m3Proof[
-         *         1
-         *     ] = 0xcd513ac65595a628994bb4adb3fea5f09212a334d42eb531c142b4c4153e42d7;
-         *
-         *     bytes32[] memory m4Proof = new bytes32[](2);
-         *     m4Proof[
-         *         0
-         *     ] = 0x7a7aad01405ef67cbfbdf791aef4b96a1da0f0235e1c893b9d9f90ace9aa2aba;
-         *     m4Proof[
-         *         1
-         *     ] = 0xcef176f06c08cd4d427835200fd74838135532147a2b74b603fcb420e80fd07a;
-         *
-         *     VaultV2.Distribution[]
-         *         memory distributions = new VaultV2.Distribution[](4);
-         *     distributions[0] = VaultV2.Distribution({
-         *         recipient: m1,
-         *         index: 0,
-         *         amount: prizeAmounts[0],
-         *         merkleProof: m1Proof
-         *     });
-         *     distributions[1] = VaultV2.Distribution({
-         *         recipient: m2,
-         *         index: 1,
-         *         amount: prizeAmounts[1],
-         *         merkleProof: m2Proof
-         *     });
-         *     distributions[2] = VaultV2.Distribution({
-         *         recipient: m3,
-         *         index: 2,
-         *         amount: prizeAmounts[2],
-         *         merkleProof: m3Proof
-         *     });
-         *     distributions[3] = VaultV2.Distribution({
-         *         recipient: m4,
-         *         index: 3,
-         *         amount: prizeAmounts[3],
-         *         merkleProof: m4Proof
-         *     });
-         *
-         *     // TODO: check why distribution amount differ from each test
-         *
-         *     // vault.distributePrizes(1, abi.encode(distributions));
-         */
-    }
-
-    function depositETH(VaultV2 vault) public payable {
-        vm.deal(m1, 100 ether);
-        vm.deal(m2, 100 ether);
-        vm.deal(m3, 100 ether);
-        vm.deal(m4, 100 ether);
-
-        vm.startPrank(m1);
-        weth.deposit{value: 100 ether}();
-        weth.approve(address(vault), 100 ether);
-        vault.deposit(100 ether, m1);
-        vm.warp(block.timestamp + 1);
-
-        vm.stopPrank();
-
-        vm.startPrank(m2);
-        weth.deposit{value: 100 ether}();
-        weth.approve(address(vault), 100 ether);
-        vault.deposit(10 ether, m2);
-        vm.stopPrank();
-
-        vm.startPrank(m3);
-        weth.deposit{value: 50 ether}();
-        weth.approve(address(vault), 50 ether);
-        vault.deposit(50 ether, m3);
-        vm.stopPrank();
-
-        vm.warp(block.timestamp + 1 days);
-
-        vm.startPrank(m4);
-        weth.deposit{value: 100 ether}();
-        weth.approve(address(vault), 100 ether);
-        vault.deposit(100 ether, m4);
-        vm.stopPrank();
-    }
-
-    function testDepositWETH() public {
-        if (block.chainid != 10) {
-            revert("only for optimism");
+        for (uint256 i = 0; i < prizeRecipients.length; i++) {
+            vm.expectEmit(true, true, false, true);
+            emit PrizeDistributed(1, prizeRecipients[i], prizeAmounts[i]);
         }
-        VaultV2 vault = deployVaultV2();
 
-        vm.deal(_owner, 100 ether);
-        vm.deal(address(this), 100 ether);
-        vm.startPrank(_owner);
-        weth.deposit{value: 100 ether}();
-        weth.approve(address(vault), 100 ether);
-        vault.deposit(100 ether, _owner);
-        console.log("owner's balanceOf vault share: ", vault.balanceOf(_owner));
-        console.log("totalAssets", vault.totalAssets());
-        console.log("totalSupply", vault.totalSupply());
-        console.log("owner's balanceOf weth: ", weth.balanceOf(_owner));
-        console.log("vault's balanceOf weth: ", weth.balanceOf(address(vault)));
-        console.log("vault's share of yield", yieldVault.balanceOf(address(vault)));
-        console.log("vault's available balance at deposit", vault.availableYieldBalance());
-        vm.warp(block.timestamp + 100 days);
-        console.log("vault's available balance after 100 days", vault.availableYieldBalance());
+        vault.distributePrizes(1);
+        assertEq(vault.drawIsFinalized(1), true);
+        assertEq(vault.drawIsFinalized(1), true);
+        vm.stopPrank();
     }
 
-    function testkWithdrawWETH() public {
-        VaultV2 vault = deployVaultV2();
-        vm.deal(_owner, 100 ether);
-        vm.deal(address(this), 100 ether);
-        vm.startPrank(_owner);
-        weth.deposit{value: 10 ether}();
-        weth.approve(address(vault), 10 ether);
-        vault.deposit(10 ether, _owner);
+    function testFinalizeDraw() external {
+        _startDrawPeriod();
+        _depositMultiUser();
 
-        console.log("owner's balanceOf vault share: ", vault.balanceOf(_owner));
+        vm.warp(vault.getDraw(1).drawEndTime);
+        _createTeams();
 
-        vm.warp(block.timestamp + 100 days);
-        vault.withdraw(vault.maxWithdraw(_owner), _owner, _owner);
-        assertEq(vault.totalSupply(), 0);
-        assertEq(weth.balanceOf(_owner), 10 ether);
-        console.log("owner's balanceOf weth: ", weth.balanceOf(_owner));
-        console.log("vault's available balance after 100 days", vault.availableYieldBalance());
-        assertEq(vault.totalAssets(), vault.availableYieldBalance());
+        uint8[] memory winningTeams = new uint8[](2);
+        winningTeams[0] = 1;
+        winningTeams[1] = 2;
+
+        vm.expectEmit(true, false, false, false);
+        emit DrawFinalized(
+            1, winningTeams, 70333568669866340472331338725676123169611570254888405765691075355522696984357, 10 ether
+        );
+        vm.startPrank(_claimer);
+        vault.finalizeDraw(
+            1, 70333568669866340472331338725676123169611570254888405765691075355522696984357, abi.encode(teams)
+        );
+        assertEq(vault.drawIsFinalized(1), true);
+        vm.stopPrank();
     }
 
-    function deployVaultV2() internal returns (VaultV2) {
+    function testAvailableYield() public {
+        uint256 balance = 1 ether;
+        _wrap(user1, balance);
+        _deposit(user1, balance);
+
+        vm.warp(block.timestamp + 100 days);
+        uint256 yield = vault.availableYieldBalance();
+        assertEq(yield > 0, true);
+    }
+
+    function testDepositWETH() external {
+        uint256 balance = 1 ether;
+        _wrap(user1, balance);
+        _deposit(user1, balance);
+
+        assertEq(vault.balanceOf(user1), balance);
+        assertEq(twabController.balanceOf(address(vault), user1), balance);
+        assertEq(vault.totalSupply(), 1 ether);
+    }
+
+    function testkWithdrawWETH() external {
+        uint256 balance = 1 ether;
+        _wrap(user1, balance);
+        _deposit(user1, balance);
+        _withdraw(user1);
+
+        assertEq(vault.balanceOf(user1), 0);
+        assertEq(twabController.balanceOf(address(vault), user1), 0);
+        assertEq(yieldVault.balanceOf(address(vault)), 0);
+    }
+
+    /* ============ Revert ============ */
+
+    function testRevertInvalidRecipient() public {
+        _startDrawPeriod();
+        _depositMultiUser();
+        vm.warp(vault.getDraw(1).drawEndTime);
+
+        vm.startPrank(_claimer);
+        _createTeams();
+        vault.finalizeDraw(
+            1, 70333568669866340472331338725676123169611570254888405765691075355522696984357, abi.encode(teams)
+        );
+        vault.distributePrizes(1);
+
+        vm.expectRevert(abi.encodeWithSelector(InvalidRecipient.selector, user5));
+        _claimPrize(user5, 10 ether);
+    }
+
+    function testRevertInvalidAmount() public {
+        _startDrawPeriod();
+        _depositMultiUser();
+
+        vm.warp(vault.getDraw(1).drawEndTime);
+
+        vm.startPrank(_claimer);
+        _createTeams();
+        vault.finalizeDraw(
+            1, 70333568669866340472331338725676123169611570254888405765691075355522696984357, abi.encode(teams)
+        );
+        vault.distributePrizes(1);
+
+        vm.expectRevert(abi.encodeWithSelector(InvalidAmount.selector));
+        _claimPrize(user1, 1000 ether);
+    }
+
+    function testRevertDrawFinalized() public {
+        _startDrawPeriod();
+        _depositMultiUser();
+        vm.warp(vault.getDraw(1).drawEndTime);
+
+        vm.startPrank(_claimer);
+        _createTeams();
+
+        vault.finalizeDraw(1, 10, abi.encode(teams));
+        vm.expectRevert(abi.encodeWithSelector(DrawAlreadyFinalized.selector, 1));
+        vault.finalizeDraw(1, 10, abi.encode(teams));
+        vm.stopPrank();
+    }
+
+    function testRevertRandomNumberIsZero() public {
+        _startDrawPeriod();
+        _depositMultiUser();
+        vm.warp(vault.getDraw(1).drawEndTime);
+
+        vm.startPrank(_claimer);
+        _createTeams();
+
+        vm.expectRevert(abi.encodeWithSelector(RandomNumberIsZero.selector));
+        vault.finalizeDraw(1, 0, abi.encode(teams));
+        vm.stopPrank();
+    }
+
+    function testRevertPrizeAlreadySet() public {
+        _startDrawPeriod();
+        _depositMultiUser();
+        vm.warp(vault.getDraw(1).drawEndTime);
+
+        vm.startPrank(_claimer);
+        _createTeams();
+
+        vault.finalizeDraw(1, 10, abi.encode(teams));
+        vault.distributePrizes(1);
+        vm.expectRevert(abi.encodeWithSelector(PrizeAlreadySet.selector, 1));
+        vault.distributePrizes(1);
+        vm.stopPrank();
+    }
+
+    function testRevertDrawNotFinalized() public {
+        _startDrawPeriod();
+        _depositMultiUser();
+        vm.warp(vault.getDraw(1).drawEndTime);
+
+        vm.startPrank(_claimer);
+        _createTeams();
+        vm.expectRevert(abi.encodeWithSelector(DrawNotFinalized.selector, 1));
+        vault.distributePrizes(1);
+        vm.stopPrank();
+    }
+
+    function testRevertCallerNotClaimer() public {
+        _startDrawPeriod();
+        _depositMultiUser();
+        vm.warp(vault.getDraw(1).drawEndTime);
+
+        vm.startPrank(_owner);
+        _createTeams();
+        vm.expectRevert(abi.encodeWithSelector(CallerNotClaimer.selector, _owner, _claimer));
+        vault.finalizeDraw(1, 10, abi.encode(teams));
+        vm.stopPrank();
+    }
+
+    /* ============ internal functions ============ */
+    function _deployVaultV2() internal returns (VaultV2) {
         return new VaultV2(
             IERC20(address(weth)),
-            "Spore WETH Vault",
-            "spvWETH",
+            "Spore USDC Vault",
+            "spvUSDC",
             twabController,
-            yieldVault,
+            IERC4626(address(yieldVault)),
             _claimer,
             _yieldFeeRecipient,
             0,
             _owner
         );
+    }
+
+    function _startDrawPeriod() internal prankception(_claimer) {
+        vault.startDrawPeriod(block.timestamp);
+    }
+
+    function _claimPrize(address account, uint256 amount) internal prankception(account) {
+        vault.claimPrize(amount);
+    }
+
+    function _wrap(address caller, uint256 amount) internal prankception(caller) {
+        weth.deposit{value: amount}();
+        weth.approve(address(vault), amount);
+    }
+
+    function _deposit(address account, uint256 amount) internal prankception(account) {
+        vault.deposit(amount, account);
+    }
+
+    function _depositMultiUser() internal {
+        uint256 balance = 1 ether;
+        _wrap(user1, balance);
+        _wrap(user2, balance);
+        _wrap(user3, balance);
+        _wrap(user4, balance);
+        _deposit(user1, balance);
+        vm.warp(block.timestamp + 1);
+        _deposit(user2, balance);
+        _deposit(user3, balance);
+        _deposit(user4, balance);
+    }
+
+    function _withdraw(address account) internal prankception(account) {
+        uint256 balance = vault.maxWithdraw(account);
+        vault.withdraw(balance, account, account);
+    }
+
+    function _createTeams() internal {
+        teams = new VaultV2.Team[](2);
+        address[] memory team1 = new address[](2);
+        team1[0] = user1;
+        team1[1] = user2;
+        address[] memory team2 = new address[](2);
+        team2[0] = user3;
+        team2[1] = user4;
+
+        uint256 team1Twab = vault.calculateTeamTwabBetween(team1, 1);
+        uint256 team2Twab = vault.calculateTeamTwabBetween(team2, 1);
+        teams[0] = VaultV2.Team({teamId: 1, teamTwab: team1Twab, teamPoints: 150, teamMembers: team1});
+        teams[1] = VaultV2.Team({teamId: 2, teamTwab: team2Twab, teamPoints: 100, teamMembers: team2});
+    }
+
+    modifier prankception(address prankee) {
+        address prankBefore = currentPrankee;
+        vm.stopPrank();
+        vm.startPrank(prankee);
+        _;
+        vm.stopPrank();
+        if (prankBefore != address(0)) {
+            vm.startPrank(prankBefore);
+        }
     }
 
     function configureChain() internal {
@@ -250,7 +342,7 @@ contract ForkMainnetVault is Test {
             yieldVault = IERC4626(0xB0f04cFB784313F97588F3D3be1b26C231122232);
 
             // twab controller
-            twabController = TwabController(0x499a9F249ec4c8Ea190bebbFD96f9A83bf4F6E52);
+            // twabController = TwabController(0x499a9F249ec4c8Ea190bebbFD96f9A83bf4F6E52);
         }
     }
 }
