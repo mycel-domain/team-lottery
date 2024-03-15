@@ -78,16 +78,13 @@ contract VaultTest is Test {
     /* ============ Draw Functions ============ */
 
     function testClaimPrize() public {
-        vm.startPrank(_owner);
-        vault.startDrawPeriod(block.timestamp);
-        vm.stopPrank();
+        _startDrawPeriod();
         _depositMultiUser();
 
         vm.warp(vault.getDraw(1).drawEndTime);
-        vm.startPrank(_owner);
+        _yield(10 ether);
 
-        yieldVaultMintRate.yield(10 ether);
-
+        vm.startPrank(_claimer);
         _createTeams();
         vault.finalizeDraw(
             1, 70333568669866340472331338725676123169611570254888405765691075355522696984357, abi.encode(teams)
@@ -109,14 +106,12 @@ contract VaultTest is Test {
     }
 
     function testDistributePrize() public {
-        vm.startPrank(_owner);
-        vault.startDrawPeriod(block.timestamp);
-        vm.stopPrank();
+        _startDrawPeriod();
         _depositMultiUser();
 
         vm.warp(vault.getDraw(1).drawEndTime);
-        vm.startPrank(_owner);
-        yieldVaultMintRate.yield(10e18);
+        _yield(10 ether);
+        vm.startPrank(_claimer);
         _createTeams();
         vault.finalizeDraw(
             1, 70333568669866340472331338725676123169611570254888405765691075355522696984357, abi.encode(teams)
@@ -136,14 +131,13 @@ contract VaultTest is Test {
     }
 
     function testFinalizeDraw() public {
-        vm.startPrank(_owner);
-        vault.startDrawPeriod(block.timestamp);
-        vm.stopPrank();
+        _startDrawPeriod();
         _depositMultiUser();
 
         vm.warp(vault.getDraw(1).drawEndTime);
-        vm.startPrank(_owner);
-        yieldVaultMintRate.yield(10 ether);
+
+        _yield(10 ether);
+        vm.startPrank(_claimer);
         _createTeams();
 
         uint8[] memory winningTeams = new uint8[](2);
@@ -213,13 +207,12 @@ contract VaultTest is Test {
     /* ============ Revert ============ */
 
     function testRevertInvalidRecipient() public {
-        vm.startPrank(_owner);
-        vault.startDrawPeriod(block.timestamp);
-        vm.stopPrank();
+        _startDrawPeriod();
         _depositMultiUser();
         vm.warp(vault.getDraw(1).drawEndTime);
-        vm.startPrank(_owner);
-        yieldVaultMintRate.yield(10 ether);
+        _yield(10 ether);
+
+        vm.startPrank(_claimer);
         _createTeams();
         vault.finalizeDraw(
             1, 70333568669866340472331338725676123169611570254888405765691075355522696984357, abi.encode(teams)
@@ -231,13 +224,12 @@ contract VaultTest is Test {
     }
 
     function testRevertInvalidAmount() public {
-        vm.startPrank(_owner);
-        vault.startDrawPeriod(block.timestamp);
-        vm.stopPrank();
+        _startDrawPeriod();
         _depositMultiUser();
         vm.warp(vault.getDraw(1).drawEndTime);
-        vm.startPrank(_owner);
-        yieldVaultMintRate.yield(10 ether);
+        _yield(10 ether);
+
+        vm.startPrank(_claimer);
         _createTeams();
         vault.finalizeDraw(
             1, 70333568669866340472331338725676123169611570254888405765691075355522696984357, abi.encode(teams)
@@ -272,15 +264,12 @@ contract VaultTest is Test {
     */
 
     function testRevertDrawFinalized() public {
-        vm.startPrank(_owner);
-        vault.startDrawPeriod(block.timestamp);
-        vm.stopPrank();
+        _startDrawPeriod();
         _depositMultiUser();
-
         vm.warp(vault.getDraw(1).drawEndTime);
+        _yield(10 ether);
 
-        vm.startPrank(_owner);
-        yieldVaultMintRate.yield(10 ether);
+        vm.startPrank(_claimer);
         _createTeams();
 
         vault.finalizeDraw(1, 10, abi.encode(teams));
@@ -290,15 +279,12 @@ contract VaultTest is Test {
     }
 
     function testRevertRandomNumberIsZero() public {
-        vm.startPrank(_owner);
-        vault.startDrawPeriod(block.timestamp);
-        vm.stopPrank();
+        _startDrawPeriod();
         _depositMultiUser();
-
         vm.warp(vault.getDraw(1).drawEndTime);
+        _yield(10 ether);
 
-        vm.startPrank(_owner);
-        yieldVaultMintRate.yield(10 ether);
+        vm.startPrank(_claimer);
         _createTeams();
 
         vm.expectRevert(abi.encodeWithSelector(RandomNumberIsZero.selector));
@@ -307,15 +293,14 @@ contract VaultTest is Test {
     }
 
     function testRevertPrizeAlreadySet() public {
-        vm.startPrank(_owner);
-        vault.startDrawPeriod(block.timestamp);
-        vm.stopPrank();
+        _startDrawPeriod();
         _depositMultiUser();
-
         vm.warp(vault.getDraw(1).drawEndTime);
-        vm.startPrank(_owner);
-        yieldVaultMintRate.yield(10e18);
+        _yield(10 ether);
+
+        vm.startPrank(_claimer);
         _createTeams();
+
         vault.finalizeDraw(1, 10, abi.encode(teams));
         vault.distributePrizes(1);
         vm.expectRevert(abi.encodeWithSelector(PrizeAlreadySet.selector, 1));
@@ -324,14 +309,12 @@ contract VaultTest is Test {
     }
 
     function testRevertDrawNotFinalized() public {
-        vm.startPrank(_owner);
-        vault.startDrawPeriod(block.timestamp);
-        vm.stopPrank();
+        _startDrawPeriod();
         _depositMultiUser();
-
         vm.warp(vault.getDraw(1).drawEndTime);
-        vm.startPrank(_owner);
-        yieldVaultMintRate.yield(10e18);
+        _yield(10 ether);
+
+        vm.startPrank(_claimer);
         _createTeams();
         vm.expectRevert(abi.encodeWithSelector(DrawNotFinalized.selector, 1));
         vault.distributePrizes(1);
@@ -370,6 +353,14 @@ contract VaultTest is Test {
 
     function _claimPrize(address account, uint256 amount) internal prankception(account) {
         vault.claimPrize(amount);
+    }
+
+    function _startDrawPeriod() internal prankception(_claimer) {
+        vault.startDrawPeriod(block.timestamp);
+    }
+
+    function _yield(uint256 amount) internal prankception(_owner) {
+        yieldVaultMintRate.yield(amount);
     }
 
     function _deposit(address account, uint256 amount) internal prankception(account) {
