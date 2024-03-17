@@ -51,7 +51,6 @@ contract ForkMainnetVault is Test {
     }
 
     function testClaimPrize() public {
-        _startDrawPeriod();
         _depositMultiUser();
 
         vm.warp(vault.getDraw(1).drawEndTime);
@@ -77,7 +76,6 @@ contract ForkMainnetVault is Test {
     }
 
     function testDistributePrize() public {
-        _startDrawPeriod();
         _depositMultiUser();
 
         vm.warp(vault.getDraw(1).drawEndTime);
@@ -101,7 +99,6 @@ contract ForkMainnetVault is Test {
     }
 
     function testFinalizeDraw() external {
-        _startDrawPeriod();
         _depositMultiUser();
 
         vm.warp(vault.getDraw(1).drawEndTime);
@@ -157,7 +154,6 @@ contract ForkMainnetVault is Test {
     /* ============ Revert ============ */
 
     function testRevertInvalidRecipient() public {
-        _startDrawPeriod();
         _depositMultiUser();
         vm.warp(vault.getDraw(1).drawEndTime);
 
@@ -173,7 +169,6 @@ contract ForkMainnetVault is Test {
     }
 
     function testRevertInvalidAmount() public {
-        _startDrawPeriod();
         _depositMultiUser();
 
         vm.warp(vault.getDraw(1).drawEndTime);
@@ -190,7 +185,6 @@ contract ForkMainnetVault is Test {
     }
 
     function testRevertDrawFinalized() public {
-        _startDrawPeriod();
         _depositMultiUser();
         vm.warp(vault.getDraw(1).drawEndTime);
 
@@ -204,7 +198,6 @@ contract ForkMainnetVault is Test {
     }
 
     function testRevertRandomNumberIsZero() public {
-        _startDrawPeriod();
         _depositMultiUser();
         vm.warp(vault.getDraw(1).drawEndTime);
 
@@ -217,7 +210,6 @@ contract ForkMainnetVault is Test {
     }
 
     function testRevertPrizeAlreadySet() public {
-        _startDrawPeriod();
         _depositMultiUser();
         vm.warp(vault.getDraw(1).drawEndTime);
 
@@ -232,7 +224,6 @@ contract ForkMainnetVault is Test {
     }
 
     function testRevertDrawNotFinalized() public {
-        _startDrawPeriod();
         _depositMultiUser();
         vm.warp(vault.getDraw(1).drawEndTime);
 
@@ -243,8 +234,13 @@ contract ForkMainnetVault is Test {
         vm.stopPrank();
     }
 
-    function testRevertCallerNotClaimer() public {
+    function testRevertStartPeriod() public {
+        vm.expectRevert(abi.encodeWithSelector(DrawNotFinalized.selector, 1));
         _startDrawPeriod();
+        vm.stopPrank();
+    }
+
+    function testRevertCallerNotClaimer() public {
         _depositMultiUser();
         vm.warp(vault.getDraw(1).drawEndTime);
 

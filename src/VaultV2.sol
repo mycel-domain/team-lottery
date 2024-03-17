@@ -333,7 +333,7 @@ contract VaultV2 is IERC4626, ERC20Permit, Ownable {
     /// This should be enough gas to mint an NFT if needed.
     uint24 private constant HOOK_GAS = 150_000;
 
-    uint24 public currentDrawId = 1;
+    uint24 public currentDrawId;
 
     /// @notice Address of the TwabController used to keep track of balances.
     TwabController private immutable _twabController;
@@ -457,13 +457,27 @@ contract VaultV2 is IERC4626, ERC20Permit, Ownable {
         _twabController = twabController_;
 
         _yieldVault = yieldVault_;
-        // _prizePool = prizePool_;
 
         _setYieldFeeRecipient(yieldFeeRecipient_);
         _setYieldFeePercentage(yieldFeePercentage_);
 
         // Approve once for max amount
         asset_.safeIncreaseAllowance(address(yieldVault_), type(uint256).max);
+
+        currentDrawId = 1;
+
+        Draw memory draw = Draw({
+            drawId: currentDrawId,
+            drawStartTime: block.timestamp,
+            drawEndTime: block.timestamp + 7 days,
+            availableYieldAtStart: _availableYieldBalance(),
+            availableYieldAtEnd: 0
+        });
+
+        draws.push(draw);
+        drawIdToDraw[currentDrawId] = draw;
+        drawIsFinalized[currentDrawId] = false;
+        emit NewDrawCreated(currentDrawId, block.timestamp, block.timestamp + 7 days);
 
         emit NewVault(
             asset_,
@@ -753,12 +767,16 @@ contract VaultV2 is IERC4626, ERC20Permit, Ownable {
      * @param drawStartTime Start time of the draw
      */
     function startDrawPeriod(uint256 drawStartTime) external onlyClaimer {
+        // check if the previous draw is finalized
+        if (!drawIsFinalized[currentDrawId]) {
+            revert DrawNotFinalized(currentDrawId);
+        }
+
         uint256 drawEndTime = drawStartTime + 7 days;
         if (block.timestamp > drawStartTime) {
             revert InvalidDrawPeriod(block.timestamp, drawStartTime);
         }
 
-        // TODO: check if the previous draw is finalized
         Draw memory draw = Draw({
             drawId: currentDrawId,
             drawStartTime: drawStartTime,
@@ -769,6 +787,7 @@ contract VaultV2 is IERC4626, ERC20Permit, Ownable {
 
         draws.push(draw);
         drawIdToDraw[currentDrawId] = draw;
+        drawIsFinalized[currentDrawId] = false;
         emit NewDrawCreated(currentDrawId, drawStartTime, drawEndTime);
     }
 
@@ -827,7 +846,6 @@ contract VaultV2 is IERC4626, ERC20Permit, Ownable {
 
         _finalizeTeamPrize(drawId);
         drawIsFinalized[drawId] = true;
-        currentDrawId++;
 
         drawIdToPrize[drawId] = prize;
 
@@ -860,6 +878,7 @@ contract VaultV2 is IERC4626, ERC20Permit, Ownable {
             }
         }
         drawPrizeSet[drawId] = true;
+        currentDrawId++;
     }
 
     /**

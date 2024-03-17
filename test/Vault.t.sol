@@ -64,7 +64,6 @@ contract VaultTest is Test {
     /* ============ Draw Functions ============ */
 
     function testClaimPrize() public {
-        _startDrawPeriod();
         _depositMultiUser();
 
         vm.warp(vault.getDraw(1).drawEndTime);
@@ -92,7 +91,6 @@ contract VaultTest is Test {
     }
 
     function testDistributePrize() public {
-        _startDrawPeriod();
         _depositMultiUser();
 
         vm.warp(vault.getDraw(1).drawEndTime);
@@ -117,7 +115,6 @@ contract VaultTest is Test {
     }
 
     function testFinalizeDraw() public {
-        _startDrawPeriod();
         _depositMultiUser();
 
         vm.warp(vault.getDraw(1).drawEndTime);
@@ -193,7 +190,6 @@ contract VaultTest is Test {
     /* ============ Revert ============ */
 
     function testRevertInvalidRecipient() public {
-        _startDrawPeriod();
         _depositMultiUser();
         vm.warp(vault.getDraw(1).drawEndTime);
         _yield(10 ether);
@@ -210,7 +206,6 @@ contract VaultTest is Test {
     }
 
     function testRevertInvalidAmount() public {
-        _startDrawPeriod();
         _depositMultiUser();
         vm.warp(vault.getDraw(1).drawEndTime);
         _yield(10 ether);
@@ -250,7 +245,6 @@ contract VaultTest is Test {
     */
 
     function testRevertDrawFinalized() public {
-        _startDrawPeriod();
         _depositMultiUser();
         vm.warp(vault.getDraw(1).drawEndTime);
         _yield(10 ether);
@@ -265,7 +259,6 @@ contract VaultTest is Test {
     }
 
     function testRevertRandomNumberIsZero() public {
-        _startDrawPeriod();
         _depositMultiUser();
         vm.warp(vault.getDraw(1).drawEndTime);
         _yield(10 ether);
@@ -279,7 +272,6 @@ contract VaultTest is Test {
     }
 
     function testRevertPrizeAlreadySet() public {
-        _startDrawPeriod();
         _depositMultiUser();
         vm.warp(vault.getDraw(1).drawEndTime);
         _yield(10 ether);
@@ -295,7 +287,6 @@ contract VaultTest is Test {
     }
 
     function testRevertDrawNotFinalized() public {
-        _startDrawPeriod();
         _depositMultiUser();
         vm.warp(vault.getDraw(1).drawEndTime);
         _yield(10 ether);
@@ -307,8 +298,13 @@ contract VaultTest is Test {
         vm.stopPrank();
     }
 
-    function testRevertCallerNotClaimer() public {
+    function testRevertStartPeriod() public {
+        vm.expectRevert(abi.encodeWithSelector(DrawNotFinalized.selector, 1));
         _startDrawPeriod();
+        vm.stopPrank();
+    }
+
+    function testRevertCallerNotClaimer() public {
         _depositMultiUser();
         vm.warp(vault.getDraw(1).drawEndTime);
         _yield(10 ether);
