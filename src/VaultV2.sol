@@ -1014,6 +1014,10 @@ contract VaultV2 is IERC4626, ERC20Permit, Ownable {
         return drawIdToDraw[drawId];
     }
 
+    function getCurrentDrawEndTime() external view returns (uint256) {
+        return drawIdToDraw[currentDrawId].drawEndTime;
+    }
+
     /**
      * @notice Get the total twab of the team members between the drawStartTime and drawEndTime.
      * @param teamMembers address[] of the team members
