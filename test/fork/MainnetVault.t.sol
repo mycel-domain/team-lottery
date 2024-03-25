@@ -6,9 +6,9 @@ import "forge-std/Test.sol";
 import "forge-std/console.sol";
 
 import {TwabController} from "pt-v5-twab-controller/TwabController.sol";
-import {IERC20} from "openzeppelin-contracts/token/ERC20/ERC20.sol";
-import {IERC4626} from "openzeppelin-contracts/interfaces/IERC4626.sol";
-import "../../src/VaultV2.sol";
+import {IERC20} from "openzeppelin/token/ERC20/ERC20.sol";
+import {IERC4626} from "openzeppelin/interfaces/IERC4626.sol";
+import "../../contracts/VaultV2.sol";
 import "../interfaces/IWETH.sol";
 
 contract ForkMainnetVault is Test {

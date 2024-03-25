@@ -2,8 +2,8 @@
 
 pragma solidity ^0.8.20;
 
-import {IERC4626} from "openzeppelin-contracts/interfaces/IERC4626.sol";
-import {ERC20, IERC20, IERC20Metadata} from "openzeppelin-contracts/token/ERC20/ERC20.sol";
+import {IERC4626} from "openzeppelin/interfaces/IERC4626.sol";
+import {ERC20, IERC20, IERC20Metadata} from "openzeppelin/token/ERC20/ERC20.sol";
 import {VaultV2 as Vault} from "./VaultV2.sol";
 import {TwabController} from "pt-v5-twab-controller/TwabController.sol";
 //

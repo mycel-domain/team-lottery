@@ -6,13 +6,13 @@ import "forge-std/Test.sol";
 import "forge-std/console.sol";
 
 import {TwabController} from "pt-v5-twab-controller/TwabController.sol";
-import {IERC20} from "openzeppelin-contracts/token/ERC20/ERC20.sol";
-import {IERC4626} from "openzeppelin-contracts/interfaces/IERC4626.sol";
+import {IERC20} from "openzeppelin/token/ERC20/ERC20.sol";
+import {IERC4626} from "openzeppelin/interfaces/IERC4626.sol";
 
-import "../src/VaultV2.sol";
-import "../src/testnet/ERC20Mintable.sol";
-import "../src/testnet/TokenFaucet.sol";
-import "../src/testnet/YieldVaultMintRate.sol";
+import "../contracts/VaultV2.sol";
+import "../contracts/testnet/ERC20Mintable.sol";
+import "../contracts/testnet/TokenFaucet.sol";
+import "../contracts/testnet/YieldVaultMintRate.sol";
 
 contract VaultTest is Test {
     address _claimer = makeAddr("claimer");
