@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
 
-import {ERC20, IERC20, IERC20Metadata} from "openzeppelin-contracts/token/ERC20/ERC20.sol";
-import {IERC4626} from "openzeppelin-contracts/interfaces/IERC4626.sol";
-import {ERC20Permit, IERC20Permit} from "openzeppelin-contracts/token/ERC20/extensions/ERC20Permit.sol";
-import {SafeERC20} from "openzeppelin-contracts/token/ERC20/utils/SafeERC20.sol";
-import {SafeCast} from "openzeppelin-contracts/utils/math/SafeCast.sol";
-import {Math} from "openzeppelin-contracts/utils/math/Math.sol";
+import {ERC20, IERC20, IERC20Metadata} from "openzeppelin/token/ERC20/ERC20.sol";
+import {IERC4626} from "openzeppelin/interfaces/IERC4626.sol";
+import {ERC20Permit, IERC20Permit} from "openzeppelin/token/ERC20/extensions/ERC20Permit.sol";
+import {SafeERC20} from "openzeppelin/token/ERC20/utils/SafeERC20.sol";
+import {SafeCast} from "openzeppelin/utils/math/SafeCast.sol";
+import {Math} from "openzeppelin/utils/math/Math.sol";
 import {Ownable} from "owner-manager-contracts/Ownable.sol";
 import {TwabController, SPONSORSHIP_ADDRESS} from "pt-v5-twab-controller/TwabController.sol";
 import {VaultHooks} from "pt-v5-vault/interfaces/IVaultHooks.sol";

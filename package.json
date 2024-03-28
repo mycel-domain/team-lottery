@@ -5,12 +5,24 @@
   "scripts": {
     "build": "forge build",
     "compile": "forge compile",
-		"clean" : "forge cache clean all",
+    "clean": "forge cache clean all",
     "test": "forge test --no-match-contract Fork",
     "test:vault": "forge fmt && forge test --match-path test/Vault.t.sol",
-		"test:vault-op": "forge fmt && forge test --fork-url $OP_RPC_URL --match-path test/fork/MainnetVault.t.sol",
-		"coverage": "forge coverage --ir-minimum",
+    "test:vault-op": "forge fmt && forge test --fork-url $OP_RPC_URL --match-path test/fork/MainnetVault.t.sol",
+    "coverage": "forge coverage --ir-minimum",
     "deploy:vault-testnet": "forge script script/Vault.s.sol:DeployVault --rpc-url $OP_SEPOLIA_URL --broadcast -vvvv --etherscan-api-key $ETHERSCAN_OPTIMISM_API_KEY --verify",
     "deploy:twab": "forge script script/Twab.s.sol:DeployTwab --rpc-url $OP_SEPOLIA_URL --broadcast -vvvv --etherscan-api-key $ETHERSCAN_OPTIMISM_API_KEY --verify"
+  },
+  "devDependencies": {
+    "@nomicfoundation/hardhat-ethers": "^3.0.5",
+    "@nomicfoundation/hardhat-foundry": "^1.1.1",
+    "@nomicfoundation/hardhat-toolbox": "^5.0.0",
+    "@nomicfoundation/hardhat-viem": "^2.0.0",
+    "ethers": "^6.11.1",
+    "hardhat": "^2.22.2"
+  },
+  "dependencies": {
+    "@nomicfoundation/hardhat-toolbox-viem": "^3.0.0",
+    "viem": "^2.9.0"
   }
 }
