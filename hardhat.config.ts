@@ -1,6 +1,9 @@
 import { HardhatUserConfig } from "hardhat/config";
 import "@nomicfoundation/hardhat-toolbox";
 import "@nomicfoundation/hardhat-foundry";
+import "@nomicfoundation/hardhat-viem";
+import "@nomicfoundation/hardhat-ethers";
+const gasLimit = 60000000;
 
 const config: HardhatUserConfig = {
   solidity: {
@@ -9,7 +12,7 @@ const config: HardhatUserConfig = {
       viaIR: true,
       optimizer: {
         enabled: true,
-        runs: 1000,
+        runs: 200,
         // details: {
         //   yulDetails: {
         //     optimizerSteps: "u",
