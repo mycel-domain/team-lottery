@@ -40,6 +40,8 @@ contract VaultTest is Test {
 
     event PrizeClaimed(address indexed recipient, uint256 indexed amount);
 
+    event NewDrawCreated(uint24 indexed drawId, uint256 indexed drawStartTime, uint256 indexed drawEndTime);
+
     function setUp() public {
         vm.startPrank(_owner);
         asset = new ERC20Mintable("USDC", "USDC", 6, _owner);
@@ -62,6 +64,33 @@ contract VaultTest is Test {
     }
 
     /* ============ Draw Functions ============ */
+    function testStartNextDraw() public {
+        _depositMultiUser();
+
+        vm.warp(vault.getDraw(1).drawEndTime);
+        vm.startPrank(_claimer);
+        _createTeams();
+        vault.finalizeDraw(
+            1, 70333568669866340472331338725676123169611570254888405765691075355522696984357, abi.encode(teams)
+        );
+
+        vault.getDistributions(1);
+        vault.distributePrizes(1);
+
+        vm.expectEmit(true, true, true, true);
+
+        uint256 drawStartTime = block.timestamp + 1;
+        uint256 drawEndTime = block.timestamp + 7 days;
+        emit NewDrawCreated(2, drawStartTime, drawEndTime);
+
+        _startDrawPeriod(drawStartTime, drawEndTime);
+        assertEq(vault.drawIsFinalized(1), true);
+        assertEq(vault.drawIsFinalized(2), false);
+        assertEq(vault.getDraw(2).drawStartTime, drawStartTime);
+        assertEq(vault.getDraw(2).drawEndTime, drawEndTime);
+
+        vm.stopPrank();
+    }
 
     function testClaimPrize() public {
         _depositMultiUser();
@@ -300,7 +329,10 @@ contract VaultTest is Test {
 
     function testRevertStartPeriod() public {
         vm.expectRevert(abi.encodeWithSelector(DrawNotFinalized.selector, 1));
-        _startDrawPeriod();
+        uint256 drawStartTime = block.timestamp + 1;
+        uint256 drawEndTime = block.timestamp + 7 days;
+
+        _startDrawPeriod(drawStartTime, drawEndTime);
         vm.stopPrank();
     }
 
@@ -349,8 +381,8 @@ contract VaultTest is Test {
         vault.claimPrize(amount);
     }
 
-    function _startDrawPeriod() internal prankception(_claimer) {
-        vault.startDrawPeriod(block.timestamp);
+    function _startDrawPeriod(uint256 startTime, uint256 endTime) internal prankception(_claimer) {
+        vault.startDrawPeriod(startTime, endTime);
     }
 
     function _yield(uint256 amount) internal prankception(_owner) {

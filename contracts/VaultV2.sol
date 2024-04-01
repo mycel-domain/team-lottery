@@ -187,7 +187,7 @@ error PermitCallerNotOwner(address caller, address owner);
  */
 error PermitAllowanceNotSet(address owner, address spender, uint256 amount, uint256 allowance);
 
-error InvalidDrawPeriod(uint256 timestamp, uint256 drawPeriod);
+error InvalidDrawPeriod(uint256 timestamp);
 
 error DrawAlreadyFinalized(uint24 drawId);
 
@@ -306,7 +306,7 @@ contract VaultV2 is IERC4626, ERC20Permit, Ownable {
 
     event DrawFinalized(uint24 indexed drawId, uint8[] winningTeams, uint256 winningRandomNumber, uint256 prizeSize);
 
-    event NewDrawCreated(uint24 indexed drawId, uint256 drawStartPeriod, uint256 drawEndPeriod);
+    event NewDrawCreated(uint24 indexed drawId, uint256 indexed drawStartPeriod, uint256 indexed drawEndPeriod);
 
     event PrizeClaimed(address indexed recipient, uint256 indexed amount);
 
@@ -765,16 +765,17 @@ contract VaultV2 is IERC4626, ERC20Permit, Ownable {
      * @dev Will revert if the drawStartTime is in the past.
      * drawEndTime should be: drawStartTime + 7 days
      * @param drawStartTime Start time of the draw
+     * @param drawEndTime End time of the draw
      */
-    function startDrawPeriod(uint256 drawStartTime) external onlyClaimer {
+    function startDrawPeriod(uint256 drawStartTime, uint256 drawEndTime) external onlyClaimer {
         // check if the previous draw is finalized
-        if (!drawIsFinalized[currentDrawId]) {
+        if (!drawIsFinalized[currentDrawId - 1]) {
             revert DrawNotFinalized(currentDrawId);
         }
 
-        uint256 drawEndTime = drawStartTime + 7 days;
-        if (block.timestamp > drawStartTime) {
-            revert InvalidDrawPeriod(block.timestamp, drawStartTime);
+        // revert if the drawStartTime is in the past or drawEndTime is the past or drawEndTime is less than drawStartTime
+        if (drawStartTime < block.timestamp || drawEndTime < block.timestamp || drawEndTime < drawStartTime) {
+            revert InvalidDrawPeriod(block.timestamp);
         }
 
         Draw memory draw = Draw({
@@ -800,7 +801,7 @@ contract VaultV2 is IERC4626, ERC20Permit, Ownable {
      */
     function finalizeDraw(uint24 drawId, uint256 _winningRandomNumber, bytes calldata _data) external onlyClaimer {
         if (block.timestamp < drawIdToDraw[drawId].drawEndTime) {
-            revert InvalidDrawPeriod(block.timestamp, drawIdToDraw[drawId].drawEndTime);
+            revert InvalidDrawPeriod(block.timestamp);
         }
         if (drawIsFinalized[drawId]) {
             revert DrawAlreadyFinalized(drawId);

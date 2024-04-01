@@ -35,6 +35,8 @@ contract ForkMainnetVault is Test {
 
     event PrizeClaimed(address indexed recipient, uint256 indexed amount);
 
+    event NewDrawCreated(uint24 indexed drawId, uint256 indexed drawStartTime, uint256 indexed drawEndTime);
+
     function setUp() public {
         configureChain();
         vm.deal(user1, 10 ether);
@@ -47,6 +49,33 @@ contract ForkMainnetVault is Test {
         vm.startPrank(_owner);
         twabController = new TwabController(3600, uint32(block.timestamp));
         vault = _deployVaultV2();
+        vm.stopPrank();
+    }
+
+    function testStartNextDraw() public {
+        _depositMultiUser();
+
+        vm.warp(vault.getDraw(1).drawEndTime);
+        vm.startPrank(_claimer);
+        _createTeams();
+        vault.finalizeDraw(
+            1, 70333568669866340472331338725676123169611570254888405765691075355522696984357, abi.encode(teams)
+        );
+
+        vault.getDistributions(1);
+        vault.distributePrizes(1);
+
+        uint256 drawStartTime = block.timestamp + 1;
+        uint256 drawEndTime = block.timestamp + 7 days;
+        vm.expectEmit(true, true, true, true);
+        emit NewDrawCreated(2, drawStartTime, drawEndTime);
+
+        _startDrawPeriod(drawStartTime, drawEndTime);
+        assertEq(vault.drawIsFinalized(1), true);
+        assertEq(vault.drawIsFinalized(2), false);
+        assertEq(vault.getDraw(2).drawStartTime, drawStartTime);
+        assertEq(vault.getDraw(2).drawEndTime, drawEndTime);
+
         vm.stopPrank();
     }
 
@@ -94,7 +123,7 @@ contract ForkMainnetVault is Test {
 
         vault.distributePrizes(1);
         assertEq(vault.drawIsFinalized(1), true);
-        assertEq(vault.drawIsFinalized(1), true);
+        assertEq(vault.drawPrizeSet(1), true);
         vm.stopPrank();
     }
 
@@ -236,7 +265,10 @@ contract ForkMainnetVault is Test {
 
     function testRevertStartPeriod() public {
         vm.expectRevert(abi.encodeWithSelector(DrawNotFinalized.selector, 1));
-        _startDrawPeriod();
+        uint256 drawStartTime = block.timestamp + 1;
+        uint256 drawEndTime = block.timestamp + 7 days;
+
+        _startDrawPeriod(drawStartTime, drawEndTime);
         vm.stopPrank();
     }
 
@@ -266,8 +298,8 @@ contract ForkMainnetVault is Test {
         );
     }
 
-    function _startDrawPeriod() internal prankception(_claimer) {
-        vault.startDrawPeriod(block.timestamp);
+    function _startDrawPeriod(uint256 startTime, uint256 endTime) internal prankception(_claimer) {
+        vault.startDrawPeriod(startTime, endTime);
     }
 
     function _claimPrize(address account, uint256 amount) internal prankception(account) {
